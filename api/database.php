@@ -1,16 +1,13 @@
 <?php
 
-$env = parse_ini_file(__DIR__ . '/../.env');
-$db = parse_url($env['DATABASE_LINK']);
+function connectDB(): PDO {
+    $env = parse_ini_file(__DIR__ . '/../.env');
+    $db = parse_url($env['DATABASE_LINK']);
 
-try {
-    $pdo = new PDO(
+    return new PDO(
         "pgsql:host={$db['host']};port={$db['port']};dbname=" . ltrim($db['path'], '/'),
         $db['user'],
-        $db['pass'] ?? ''
+        $db['pass'] ?? '',
+        [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION]
     );
-
-    echo "Подключение успешно!";
-} catch (PDOException $e) {
-    echo "Ошибка: " . $e->getMessage();
 }
