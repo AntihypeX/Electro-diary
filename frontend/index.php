@@ -28,32 +28,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
     $action = $input['action'] ?? '';
 
     if ($action === 'login') {
-      $loginName = trim((string) ($input['login'] ?? ''));
-      $password  = (string) ($input['password'] ?? '');
+        $loginName = trim((string) ($input['login'] ?? ''));
+        $password  = (string) ($input['password'] ?? '');
 
-      if ($loginName === '' || $password === '') {
-          echo json_encode(['ok' => false, 'error' => 'Укажите логин и пароль.']);
-          exit;
-      }
+        if ($loginName === '' || $password === '') {
+            echo json_encode(['ok' => false, 'error' => 'Укажите логин и пароль.']);
+            exit;
+        }
 
-      if (login($loginName, $password)) {
-          $user = getCurrentUser();
-          
-          // Определяем, куда перенаправить пользователя в зависимости от роли
-          $redirectUrl = 'index.php';
-          if ($user && isset($user['role']) && $user['role'] === 'student') {
-              $redirectUrl = 'student.php';
-          }
-
-          echo json_encode([
-              'ok' => true, 
-              'user' => $user,
-              'redirect' => $redirectUrl
-          ]);
-      } else {
-          echo json_encode(['ok' => false, 'error' => 'Неверный логин или пароль.']);
-      }
-      exit;
+        if (login($loginName, $password)) {
+            echo json_encode(['ok' => true, 'user' => getCurrentUser()]);
+        } else {
+            echo json_encode(['ok' => false, 'error' => 'Неверный логин или пароль.']);
+        }
+        exit;
     }
 
     if ($action === 'logout') {
@@ -626,13 +614,6 @@ $userJson = $currentUser
             errEl.innerHTML = `<div class="alert error">${esc(data.error || "Ошибка входа")}</div>`;
             return;
           }
-          
-          // Если сервер прислал адрес для перенаправления (например, student.php), переходим на него
-          if (data.redirect) {
-            window.location.href = data.redirect;
-            return;
-          }
-
           state.user = data.user;
           state.page = "overview";
           render();
