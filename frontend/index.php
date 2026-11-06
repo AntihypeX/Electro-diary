@@ -83,16 +83,16 @@ $userJson = $currentUser
       ];
 
       const initialGrades = [
-        { id: 1,  studentId: 1, subject: "Базы данных",           value: 5, type: "Экзамен", date: "2026-01-22" },
-        { id: 2,  studentId: 1, subject: "Программирование",      value: 5, type: "Текущая", date: "2026-02-10" },
-        { id: 3,  studentId: 1, subject: "Дискретная математика", value: 4, type: "Текущая", date: "2026-02-14" },
-        { id: 4,  studentId: 2, subject: "Базы данных",           value: 4, type: "Экзамен", date: "2026-01-22" },
-        { id: 5,  studentId: 2, subject: "Программирование",      value: 3, type: "Текущая", date: "2026-02-10" },
-        { id: 6,  studentId: 3, subject: "Базы данных",           value: 5, type: "Экзамен", date: "2026-01-22" },
-        { id: 7,  studentId: 3, subject: "Программирование",      value: 4, type: "Текущая", date: "2026-02-10" },
-        { id: 8,  studentId: 4, subject: "Базы данных",           value: 3, type: "Экзамен", date: "2026-01-22" },
-        { id: 9,  studentId: 5, subject: "Программирование",      value: 5, type: "Текущая", date: "2026-02-12" },
-        { id: 10, studentId: 6, subject: "Базы данных",           value: 4, type: "Экзамен", date: "2026-01-22" },
+        { id: 1,  studentId: 1, subject: "Базы данных",           value: 5, type: "Экзамен", date: "2025-01-22" },
+        { id: 2,  studentId: 1, subject: "Программирование",      value: 5, type: "Текущая", date: "2025-02-10" },
+        { id: 3,  studentId: 1, subject: "Дискретная математика", value: 4, type: "Текущая", date: "2025-02-14" },
+        { id: 4,  studentId: 2, subject: "Базы данных",           value: 4, type: "Экзамен", date: "2025-01-22" },
+        { id: 5,  studentId: 2, subject: "Программирование",      value: 3, type: "Текущая", date: "2025-02-10" },
+        { id: 6,  studentId: 3, subject: "Базы данных",           value: 5, type: "Экзамен", date: "2025-01-22" },
+        { id: 7,  studentId: 3, subject: "Программирование",      value: 4, type: "Текущая", date: "2025-02-10" },
+        { id: 8,  studentId: 4, subject: "Базы данных",           value: 3, type: "Экзамен", date: "2025-01-22" },
+        { id: 9,  studentId: 5, subject: "Программирование",      value: 5, type: "Текущая", date: "2025-02-12" },
+        { id: 10, studentId: 6, subject: "Базы данных",           value: 4, type: "Экзамен", date: "2025-01-22" },
       ];
 
       const roleNames = {
@@ -149,7 +149,7 @@ $userJson = $currentUser
 
       /* ====================== РЕНДЕР: ОБЩИЕ БЛОКИ ====================== */
       function renderBrand() {
-        return `<div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>`;
+        return `<div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>КОНТУР</b></div>`;
       }
       function renderMetric(label, value, note) {
         return `<div class="metric"><span>${label}</span><b>${value}</b><small>${note}</small></div>`;
@@ -169,19 +169,17 @@ $userJson = $currentUser
             <main class="login-main">
               <section class="login-copy">
                 <div class="eyebrow">Образовательная платформа</div>
-                <h1>Успеваемость всегда под рукой</h1>
+                <h1>Успеваемость<br />в ясном контуре</h1>
                 <p>Единое пространство для преподавателей, студентов и сотрудников кафедры.</p>
                 <div class="login-stats">
-                  <div><b>4</b><span>корпуса</span></div>
+                  <div><b>4</b><span>роли в системе</span></div>
                   <div><b>24/7</b><span>доступ к данным</span></div>
-                  <div><b>25+</b><span>специальностей</span></div>
                 </div>
               </section>
               <form class="login-card" onsubmit="handleLogin(event)">
-                <div class="Text">
-                  <h2>Добро пожаловать</h2>
-                  <p>Введите данные своей учётной записи</p>
-                </div>
+                <div class="card-index">01 / ВХОД</div>
+                <h2>Добро пожаловать</h2>
+                <p>Введите данные своей учётной записи</p>
                 <div id="login-error"></div>
                 <label>Логин
                   <input id="login-input" placeholder="Введите логин" autocomplete="username" />
@@ -190,10 +188,17 @@ $userJson = $currentUser
                   <input id="password-input" type="password" placeholder="Введите пароль" autocomplete="current-password" />
                 </label>
                 <button class="primary login-button" type="submit">Войти в систему ${icon("arrow")}</button>
+                <div class="demo-box">
+                  <b>Демонстрационный доступ</b>
+                  <span>teacher / teacher</span>
+                  <span>head / head</span>
+                  <span>student / student</span>
+                  <span>secretary / Ctrh3nfh)</span>
+                </div>
               </form>
             </main>
             <footer class="login-footer">
-              <span>© 2026 Контур образования</span>
+              <span>© 2025 Контур образования</span>
               <span>Защищённое соединение</span>
             </footer>
           </div>`;
@@ -391,7 +396,7 @@ $userJson = $currentUser
           <div class="page-stack">
             <section class="hero-panel analytics-hero">
               <div>
-                <span class="section-number">АНАЛИТИКА / 2026</span>
+                <span class="section-number">АНАЛИТИКА / 2025</span>
                 <h2>${avg(students.map((s) => s.id)).toFixed(2)}</h2>
                 <p>Средний балл всех групп кафедры</p>
               </div>
@@ -563,7 +568,7 @@ $userJson = $currentUser
                 </div>
                 <div class="date-block">
                   <span>УЧЕБНЫЙ ГОД</span>
-                  <b>2026 / 2026</b>
+                  <b>2024 / 2025</b>
                 </div>
               </header>
               ${state.notice ? `
