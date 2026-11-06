@@ -14,43 +14,70 @@ if (!$currentUser || $currentUser['role'] !== 'student') {
 
 $csrfToken = $_SESSION['csrf_token'] ?? '';
 
-// Статические демо-данные для студента
-$students = [
-    1 => ["id" => 1, "name" => "Алина Воронцова", "group" => "ИВТ-21", "birthDate" => "2004-03-14", "phone" => "+7 912 440-18-42", "email" => "vorontsova@edu.ru"],
-    2 => ["id" => 2, "name" => "Максим Крылов",   "group" => "ИВТ-21", "birthDate" => "2003-11-02", "phone" => "+7 903 177-25-09", "email" => "krylov@edu.ru"],
-    3 => ["id" => 3, "name" => "Дарья Лебедева",  "group" => "ИВТ-21", "birthDate" => "2004-07-19", "phone" => "+7 999 410-05-51", "email" => "lebedeva@edu.ru"],
-];
+$studentName = $currentUser['name'];
+$groupName = null;
+$diaryMessage = 'Оценок пока нет.';
+$subjects = [];
+$gradesBySubjectAndDate = [];
+$dates = [];
 
-$myRecord = $students[$currentUser['id'] ?? 1] ?? $students[1];
+try {
+    $pdo = connectDB();
+    $statement = $pdo->prepare(<<<'SQL'
+        WITH student_profile AS (
+            SELECT MIN(id) AS id
+            FROM public.students
+            WHERE auth_id = :auth_id
+            HAVING COUNT(*) = 1
+        )
+        SELECT st.fio, g.name AS group_name, BTRIM(s.name) AS subject_name,
+               LOWER(BTRIM(s.name)) AS subject_key,
+               TO_CHAR(l.date, 'YYYY-MM-DD') AS grade_date,
+               e.grade
+        FROM student_profile p
+        JOIN public.students st ON st.id = p.id
+        JOIN public.stud_groups g ON g.id = st.in_group
+        LEFT JOIN (
+            public.evaluations e
+            JOIN public.lessons l ON l.id = e.lesson_id
+            JOIN public.subjects s ON s.id = l.subject
+        ) ON e.student_id = st.id AND NULLIF(BTRIM(e.grade), '') IS NOT NULL
+        ORDER BY l.date, l.num_in_table, e.id
+        SQL);
+    $statement->execute(['auth_id' => $currentUser['id']]);
+    $profile = $statement->fetch(PDO::FETCH_ASSOC);
 
-// Расширенный набор оценок за учебный 2026-2027 год (с сентября по июнь)
-$allGrades = [
-    // 2026 год (Сентябрь - декабрь -> 1 семестр)
-    ["studentId" => 1, "subject" => "Алгебра и геометрия",  "value" => 5, "type" => "Текущая", "date" => "2026-09-10"],
-    ["studentId" => 1, "subject" => "Базы данных",           "value" => 5, "type" => "Текущая", "date" => "2026-09-18"],
-    ["studentId" => 1, "subject" => "Математический анализ", "value" => 4, "type" => "Текущая", "date" => "2026-10-05"],
-    ["studentId" => 1, "subject" => "Физика",                "value" => 4, "type" => "Текущая", "date" => "2026-10-15"],
-    ["studentId" => 1, "subject" => "Программирование",      "value" => 5, "type" => "Экзамен", "date" => "2026-11-20"],
-    ["studentId" => 1, "subject" => "Архитектура ЭВМ",       "value" => 4, "type" => "Текущая", "date" => "2026-12-10"],
+    if ($profile === false) {
+        $diaryMessage = 'Аккаунт должен быть связан с одним профилем студента.';
+    } else {
+        $studentName = $profile['fio'];
+        $groupName = $profile['group_name'];
 
-    // 2027 год (Январь - июнь -> 2 семестр)
-    ["studentId" => 1, "subject" => "Базы данных",           "value" => 5, "type" => "Экзамен", "date" => "2027-01-15"],
-    ["studentId" => 1, "subject" => "Математический анализ", "value" => 4, "type" => "Экзамен", "date" => "2027-01-20"],
-    ["studentId" => 1, "subject" => "Алгебра и геометрия",  "value" => 5, "type" => "Экзамен", "date" => "2027-01-25"],
-    ["studentId" => 1, "subject" => "Программирование",      "value" => 5, "type" => "Текущая", "date" => "2027-02-10"],
-    ["studentId" => 1, "subject" => "Дискретная математика", "value" => 4, "type" => "Текущая", "date" => "2027-02-14"],
-    ["studentId" => 1, "subject" => "Физика",                "value" => 3, "type" => "Текущая", "date" => "2027-02-18"],
-    ["studentId" => 1, "subject" => "Базы данных",           "value" => 4, "type" => "Текущая", "date" => "2027-03-05"],
-    ["studentId" => 1, "subject" => "Программирование",      "value" => 4, "type" => "Экзамен", "date" => "2027-03-20"],
-    ["studentId" => 1, "subject" => "Дискретная математика", "value" => 5, "type" => "Текущая", "date" => "2027-03-25"],
-    ["studentId" => 1, "subject" => "Архитектура ЭВМ",       "value" => 4, "type" => "Текущая", "date" => "2027-04-02"],
-    ["studentId" => 1, "subject" => "Алгебра и геометрия",  "value" => 5, "type" => "Текущая", "date" => "2027-04-12"],
-    ["studentId" => 1, "subject" => "Физика",                "value" => 5, "type" => "Экзамен", "date" => "2027-05-18"],
-];
+        do {
+            if ($profile['grade'] !== null) {
+                $key = $profile['subject_key'];
+                $date = $profile['grade_date'];
+                $subjects[$key] ??= $profile['subject_name'];
+                $gradesBySubjectAndDate[$key][$date][] = $profile['grade'];
+                $dates[$date] = true;
+            }
+        } while ($profile = $statement->fetch(PDO::FETCH_ASSOC));
+    }
+} catch (PDOException $error) {
+    http_response_code(500);
+    error_log('student.php diary query failed: ' . $error->getCode());
+    $diaryMessage = 'Не удалось загрузить оценки. Попробуйте позже.';
+}
 
-$myGrades = array_filter($allGrades, fn($g) => $g['studentId'] === $myRecord['id']);
-$allSubjects = array_unique(array_column($myGrades, 'subject'));
-sort($allSubjects);
+asort($subjects, SORT_STRING);
+$dates = array_keys($dates);
+sort($dates, SORT_STRING);
+
+$academicStartYear = static function (string $date): int {
+    return (int) substr($date, 0, 4) - (substr($date, 5, 2) < '09' ? 1 : 0);
+};
+$firstAcademicYear = $academicStartYear($dates[0] ?? date('Y-m-d'));
+$lastAcademicYear = $academicStartYear($dates[count($dates) - 1] ?? date('Y-m-d')) + 1;
 
 // Месяцы учебного года (с сентября по июнь)
 $academicMonths = [
@@ -75,7 +102,7 @@ $monthsShort = [
 // Текущий месяц по умолчанию
 $currentMonth = date("m");
 if (!isset($academicMonths[$currentMonth])) {
-    $currentMonth = "03"; // Если запуск летом (июль/август), по умолчанию ставим март для примера
+    $currentMonth = "";
 }
 ?>
 <!doctype html>
@@ -91,10 +118,10 @@ if (!isset($academicMonths[$currentMonth])) {
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>
         <div class="user-card">
-          <span class="avatar"><?= mb_strtoupper(mb_substr($myRecord['name'], 0, 1)) ?></span>
+          <span class="avatar"><?= htmlspecialchars(mb_strtoupper(mb_substr($studentName, 0, 1))) ?></span>
           <div>
-            <b><?= htmlspecialchars($myRecord['name']) ?></b>
-            <small>Студент (<?= htmlspecialchars($myRecord['group']) ?>)</small>
+            <b><?= htmlspecialchars($studentName) ?></b>
+            <small>Студент<?= $groupName !== null ? ' (' . htmlspecialchars($groupName) . ')' : '' ?></small>
           </div>
         </div>
         <nav>
@@ -116,8 +143,8 @@ if (!isset($academicMonths[$currentMonth])) {
             <h1>Моя успеваемость</h1>
           </div>
           <div class="date-block">
-            <span>УЧЕБНЫЙ ГОД</span>
-            <b>2026–2027</b>
+            <span>УЧЕБНЫЙ ПЕРИОД</span>
+            <b><?= $firstAcademicYear ?>–<?= $lastAcademicYear ?></b>
           </div>
         </header>
 
@@ -145,22 +172,17 @@ if (!isset($academicMonths[$currentMonth])) {
               <span>Дисциплина</span>
               <select id="subjectFilter" onchange="filterTable()">
                 <option value="">Все предметы</option>
-                <?php foreach ($allSubjects as $subj): ?>
-                  <option value="<?= htmlspecialchars($subj) ?>"><?= htmlspecialchars($subj) ?></option>
+                <?php foreach ($subjects as $key => $subject): ?>
+                  <option value="<?= htmlspecialchars((string) $key) ?>"><?= htmlspecialchars($subject) ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
           </div>
 
-          <?php
-          $dates = array_unique(array_column($myGrades, 'date'));
-          sort($dates);
-          ?>
-
           <section class="panel table-panel">
             <header class="panel-head">
               <div><h3>Успеваемость</h3></div>
-              <span class="count"><?= count($allSubjects) ?> дисциплин</span>
+              <span class="count"><?= count($subjects) ?> дисциплин</span>
             </header>
             <div class="matrix-container">
               <table class="matrix-table" id="gradesTable">
@@ -183,22 +205,23 @@ if (!isset($academicMonths[$currentMonth])) {
                   </tr>
                 </thead>
                 <tbody>
-                  <?php foreach ($allSubjects as $subject): ?>
-                    <tr data-subject="<?= htmlspecialchars($subject) ?>">
+                  <?php if ($subjects === []): ?>
+                    <tr><td colspan="2" class="muted"><?= htmlspecialchars($diaryMessage) ?></td></tr>
+                  <?php endif; ?>
+                  <?php foreach ($subjects as $key => $subject): ?>
+                    <tr data-subject="<?= htmlspecialchars((string) $key) ?>">
                       <td><b><?= htmlspecialchars($subject) ?></b></td>
-                      <?php 
-                      $dateGradesMap = [];
-                      foreach ($myGrades as $g) {
-                          if ($g['subject'] === $subject) {
-                              $dateGradesMap[$g['date']] = $g['value'];
-                          }
-                      }
-                      foreach ($dates as $date): 
+                      <?php foreach ($dates as $date):
                           $monthCode = date("m", strtotime($date));
-                          $gradeVal = $dateGradesMap[$date] ?? null;
+                          $cellGrades = $gradesBySubjectAndDate[$key][$date] ?? [];
                       ?>
                         <td data-month="<?= $monthCode ?>">
-                          <?= $gradeVal !== null ? '<span class="grade" style="margin: 0 auto;" data-value="' . $gradeVal . '">' . $gradeVal . '</span>' : '<span class="muted">—</span>' ?>
+                          <?php if ($cellGrades === []): ?>
+                            <span class="muted">—</span>
+                          <?php endif; ?>
+                          <?php foreach ($cellGrades as $grade): ?>
+                            <span class="grade" style="margin: 0 auto;" data-value="<?= htmlspecialchars($grade) ?>"><?= htmlspecialchars($grade) ?></span>
+                          <?php endforeach; ?>
                         </td>
                       <?php endforeach; ?>
                       <td>
@@ -252,7 +275,7 @@ if (!isset($academicMonths[$currentMonth])) {
         const selectedSubject = document.getElementById('subjectFilter').value;
         
         const table = document.getElementById('gradesTable');
-        const rows = table.querySelectorAll('tbody tr');
+        const rows = table.querySelectorAll('tbody tr[data-subject]');
         const headers = table.querySelectorAll('thead th');
 
         // Определяем, какие месяцы подходят под выбранный семестр (если месяц не выбран явно)
@@ -298,14 +321,13 @@ if (!isset($academicMonths[$currentMonth])) {
               if (index === 0 || index === headers.length - 1) return;
               if (th.style.display !== 'none') {
                 const cell = row.children[index];
-                const gradeSpan = cell.querySelector('.grade');
-                if (gradeSpan) {
-                  const val = parseFloat(gradeSpan.getAttribute('data-value'));
-                  if (!isNaN(val)) {
+                cell.querySelectorAll('.grade').forEach(grade => {
+                  const val = Number(grade.dataset.value);
+                  if (Number.isFinite(val)) {
                     sum += val;
                     count++;
                   }
-                }
+                });
               }
             });
 
