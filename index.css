@@ -225,6 +225,7 @@ select {
   outline: none;
   font-size: 13px;
   transition: .2s;
+  width: auto;
 }
 
 input:focus,
