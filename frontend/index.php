@@ -1,5 +1,5 @@
 <?php
-require_once __DIR__ . '/../api/auth.php';
+require_once __DIR__ . '/../api/current-user.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -40,10 +40,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
           $user = getCurrentUser();
           
           // Определяем, куда перенаправить пользователя в зависимости от роли
-          $redirectUrl = 'index.php';
-          if ($user && isset($user['role']) && $user['role'] === 'student') {
-              $redirectUrl = 'student.php';
-          }
+          $redirectUrl = match ($user['role'] ?? null) {
+              'student' => 'student.php',
+              'teacher' => 'teacher.php',
+              default => 'index.php',
+          };
 
           echo json_encode([
               'ok' => true, 
@@ -68,6 +69,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
 /* ---- Рендер страницы ---- */
 $currentUser = getCurrentUser();
+if (($currentUser['role'] ?? null) === 'teacher') {
+    header('Location: teacher.php');
+    exit;
+}
 $userJson = $currentUser
     ? json_encode($currentUser, JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_APOS | JSON_HEX_QUOT | JSON_HEX_AMP)
     : 'null';
