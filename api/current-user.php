@@ -31,7 +31,7 @@ if (!function_exists('getCurrentUser')) {
             'преподаватель', 'учитель' => 'teacher',
             'студент' => 'student',
             'секретарь' => 'secretary',
-            'заведующий кафедрой' => 'head',
+            'заведующий кафедрой', 'заведующий отделением' => 'head',
             default => $user['role'],
         };
 

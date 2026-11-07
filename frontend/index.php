@@ -44,6 +44,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
               'student' => 'student.php',
               'teacher' => 'teacher.php',
               'secretary' => 'secretary.php',
+              'head' => 'head.php',
               default => 'index.php',
           };
 
@@ -70,8 +71,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
 /* ---- Рендер страницы ---- */
 $currentUser = getCurrentUser();
-if (in_array($currentUser['role'] ?? null, ['teacher', 'secretary'], true)) {
-    header('Location: ' . ($currentUser['role'] === 'teacher' ? 'teacher.php' : 'secretary.php'));
+$cabinet = match ($currentUser['role'] ?? null) {
+    'teacher' => 'teacher.php',
+    'secretary' => 'secretary.php',
+    'head' => 'head.php',
+    default => null,
+};
+if ($cabinet !== null) {
+    header('Location: ' . $cabinet);
     exit;
 }
 $userJson = $currentUser
