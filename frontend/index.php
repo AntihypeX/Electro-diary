@@ -43,6 +43,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
           $redirectUrl = match ($user['role'] ?? null) {
               'student' => 'student.php',
               'teacher' => 'teacher.php',
+              'secretary' => 'secretary.php',
               default => 'index.php',
           };
 
@@ -69,8 +70,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST'
 
 /* ---- Рендер страницы ---- */
 $currentUser = getCurrentUser();
-if (($currentUser['role'] ?? null) === 'teacher') {
-    header('Location: teacher.php');
+if (in_array($currentUser['role'] ?? null, ['teacher', 'secretary'], true)) {
+    header('Location: ' . ($currentUser['role'] === 'teacher' ? 'teacher.php' : 'secretary.php'));
     exit;
 }
 $userJson = $currentUser
