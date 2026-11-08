@@ -435,14 +435,237 @@ body .page-stack {
     display: block;
   }
 }
-.result-matrix tbody th{color:#151515;background:#f8f8f6}
-.result-matrix tbody td{background:white}
+.result-matrix tbody th {
+  color: #151515;
+  background: #f8f8f6;
+}
+.result-matrix tbody td {
+  background: white;
+}
 /* Текстовые результаты имеют прямоугольник по ширине надписи. */
 .result-marks .grade,
-.grade[data-text-result]{display:inline-flex;align-items:center;justify-content:center;width:max-content;min-width:30px;max-width:none;height:auto;min-height:30px;padding:6px 10px;white-space:nowrap;line-height:1.4}
-.quick-grade-options{flex-wrap:wrap}
-.quick-grade-options button{flex:1 0 36px;width:auto;padding:7px;white-space:nowrap}
-.quick-grade-picker{background:#fafaf8;border:1px solid #aaa;padding:12px;box-shadow:0 6px 24px #0003}
-.quick-grade-picker>.cab-button,.quick-grade-picker>.primary{margin-top:8px;width:100%}
-.quick-grade-queued{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
-.teacher .teacher-matrix [data-lesson-kind="Практическая"]{background:#ededeb!important}
+.grade[data-text-result] {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: max-content;
+  min-width: 30px;
+  max-width: none;
+  height: auto;
+  min-height: 30px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  line-height: 1.4;
+}
+.quick-grade-options {
+  flex-wrap: wrap;
+}
+.quick-grade-options button {
+  flex: 1 0 36px;
+  width: auto;
+  padding: 7px;
+  white-space: nowrap;
+}
+.quick-grade-picker {
+  background: #fafaf8;
+  border: 1px solid #aaa;
+  padding: 12px;
+  box-shadow: 0 6px 24px #0003;
+}
+.quick-grade-picker > .cab-button,
+.quick-grade-picker > .primary {
+  margin-top: 8px;
+  width: 100%;
+}
+.quick-grade-queued {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 5px;
+  margin-top: 8px;
+}
+.teacher .teacher-matrix [data-lesson-kind="Практическая"] {
+  background: #ededeb !important;
+}
+/* Зачётная книжка и формы используют общую чёрно-белую палитру. */
+.cab-avatar-dialog button,
+.cab-avatar-dialog input {
+  font: inherit;
+}
+.cab-file-control {
+  display: block;
+  margin-top: 9px;
+  border: 1px solid #ccc;
+  background: #fff;
+  padding: 10px;
+  max-width: 100%;
+}
+.cab-avatar-dialog input[type="file"] {
+  padding: 0;
+  border: 0;
+  width: 100%;
+  font-size: 12px;
+  background: transparent;
+  letter-spacing: normal;
+  text-transform: none;
+}
+.cab-avatar-dialog input[type="file"]::file-selector-button {
+  font: inherit;
+  border: 1px solid #222;
+  background: #222;
+  color: white;
+  padding: 10px 12px;
+  margin-right: 10px;
+  cursor: pointer;
+}
+.cab-avatar-dialog input[type="file"]::file-selector-button:hover {
+  background: #444;
+}
+.cab-avatar-dialog [role="alert"]:empty {
+  display: none;
+}
+.quick-grade-options button {
+  flex: 1 1 auto;
+  min-width: max-content;
+  padding: 8px 10px;
+  font-size: 13px;
+  line-height: 1.3;
+}
+.quick-grade-picker {
+  max-height: calc(100dvh - 16px);
+  overflow: auto;
+}
+.record-years {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 16px 20px;
+  border-bottom: 1px solid #d3d3cf;
+}
+.record-years .cab-button {
+  background: #ededeb;
+}
+.record-year {
+  padding: 20px;
+  scroll-margin-top: 20px;
+}
+.record-year > h3 {
+  font-size: 17px;
+  margin: 0 0 20px;
+}
+.record-semester + .record-semester {
+  margin-top: 30px;
+}
+.record-semester h4 {
+  font-size: 15px;
+  margin: 0 0 15px;
+  font-weight: 600;
+}
+.record-table td,
+.record-table th {
+  border-width: 0 0 1px;
+  padding: 14px 10px;
+  vertical-align: top;
+  line-height: 1.6;
+}
+.record-table th {
+  white-space: normal;
+}
+.record-table .record-person,
+.record-table .record-subject {
+  min-width: 150px;
+}
+.record-table td {
+  overflow-wrap: anywhere;
+  max-width: 260px;
+}
+.record-date {
+  white-space: nowrap;
+}
+.record-table .record-mark {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 32px;
+  width: max-content;
+  max-width: none;
+  height: auto;
+  min-height: 32px;
+  padding: 6px 10px;
+  white-space: nowrap;
+  background: #222;
+  color: #fff;
+  border: 1px solid #222;
+  line-height: 1.4;
+  font-size: 12px;
+  font-weight: 700;
+}
+.record-table [disabled] {
+  opacity: 0.45;
+  cursor: default;
+}
+.record-details-form {
+  display: grid;
+  gap: 15px;
+}
+.record-details-form label {
+  display: grid;
+  gap: 8px;
+}
+.record-details-form input {
+  width: 100%;
+}
+.record-details-form p {
+  font-size: 12px;
+  line-height: 1.6;
+  margin: 0;
+}
+.cab-button:focus-visible,
+.record-mark:focus-visible {
+  outline: 2px solid #555;
+  outline-offset: 3px;
+}
+@media (max-width: 600px) {
+  .record-year {
+    padding: 12px;
+  }
+  .record-year > h3 {
+    font-size: 15px;
+  }
+  .record-years {
+    padding: 12px;
+  }
+  .record-table td,
+  .record-table th {
+    max-width: none;
+  }
+  .record-table .record-person,
+  .record-table .record-subject {
+    min-width: 0;
+  }
+  .record-table td {
+    line-height: 1.4;
+  }
+  .cab-avatar-dialog {
+    padding: 18px;
+  }
+  .cab-avatar-dialog .cab-actions > * {
+    flex: 1;
+  }
+}
+.record-table td {
+  white-space: normal;
+}
+.record-table .record-date {
+  white-space: nowrap;
+}
+@media (max-width: 600px) {
+  .record-table td::before {
+    min-width: 0;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.5;
+  }
+  .record-table .mobile-cell-value {
+    white-space: normal;
+  }
+}

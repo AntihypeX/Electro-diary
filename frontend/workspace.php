@@ -63,7 +63,15 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             if (!is_array($payload)) {
                 throw new RuntimeException("Некорректная отметка.");
             }
-            $payload["action"] = "attestation";
+            if (
+                !in_array(
+                    $payload["action"] ?? "",
+                    ["attestation", "attestation_delete", "result_details"],
+                    true,
+                )
+            ) {
+                throw new RuntimeException("Неизвестное действие.");
+            }
             if (
                 !in_array(
                     $payload["kind"] ?? "",
@@ -79,8 +87,10 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
         $db->commit();
         $_SESSION["workspace_notice"] = "Изменения сохранены.";
-        if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')) {
-            header('Content-Type: application/json'); echo json_encode(['ok'=>true]); exit;
+        if (str_contains($_SERVER["HTTP_ACCEPT"] ?? "", "application/json")) {
+            header("Content-Type: application/json");
+            echo json_encode(["ok" => true]);
+            exit();
         }
         header("Location: " . $role . ".php?" . http_build_query($_GET));
         exit();
@@ -92,11 +102,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             $e instanceof PDOException
                 ? "Проверьте выбранный корпус и руководителя."
                 : $e->getMessage();
-        if (str_contains($_SERVER['HTTP_ACCEPT'] ?? '', 'application/json')) {
-            http_response_code(400); header('Content-Type: application/json');
-            echo json_encode(['error'=>$message],JSON_UNESCAPED_UNICODE); exit;
+        if (str_contains($_SERVER["HTTP_ACCEPT"] ?? "", "application/json")) {
+            http_response_code(400);
+            header("Content-Type: application/json");
+            echo json_encode(["error" => $message], JSON_UNESCAPED_UNICODE);
+            exit();
         }
-
     }
 }
 $message = $message ?: $_SESSION["workspace_notice"] ?? "";
@@ -154,7 +165,7 @@ cabShell($role, $user, $tab, function () use (
     "Сортировка",
     $sorts,
     $sort,
-); ?><button class="primary" hidden>Показать</button><?= cabinetResetLink(); ?></form><?php }
+); ?><button class="primary" hidden>Показать</button><?= cabinetResetLink() ?></form><?php }
         if ($groupId) {
             $group = cabQuery(
                 $db,
@@ -361,7 +372,7 @@ if ($role === "teacher") {
     }
     cabSelect("student", "Студент", [0 => "Все студенты"] + $roster, $student);
 }
-?><button class="primary" hidden>Показать</button><?= cabinetResetLink(); ?></form><?php
+?><button class="primary" hidden>Показать</button><?= cabinetResetLink() ?></form><?php
 $sql =
     "SELECT a.*,s.name AS subject,t.fio FROM public.teacher_attestations a JOIN public.subjects s ON s.id=a.subject_id JOIN public.teachers t ON t.id=a.teacher_id WHERE a.period_start>=? AND a.period_start<?";
 $args = [$start, $end];
@@ -382,66 +393,36 @@ $rows = cabQuery(
     $args,
 )->fetchAll(PDO::FETCH_ASSOC);
 $kinds = ["exam" => "Экзамен", "diff" => "Дифзачёт", "credit" => "Зачёт"];
-if ($role === "student") {
-    echo '<section class="panel"><div class="cab-scroll"><table class="cab-table"><thead><tr><th>Предмет</th><th>Период</th><th>Вид</th><th>Результат</th><th>Преподаватель</th></tr></thead><tbody>';
-    foreach ($rows as $r) {
-        echo "<tr><td>" .
-            ch($r["subject"]) .
-            "</td><td>" .
-            ch(
-                $r["kind"] === "month"
-                    ? substr($r["period_start"], 0, 7)
-                    : $semester . " семестр",
-            ) .
-            "</td><td>" .
-            ch($kinds[$r["kind"]] ?? "За месяц") .
-            "</td><td>" .
-            ch($r["grade"]) .
-            "</td><td>" .
-            ch($r["fio"]) .
-            "</td></tr>";
-    }
-    if (!$rows) {
-        echo '<tr><td colspan="5">Результаты пока не выставлены.</td></tr>';
-    }
-    echo "</tbody></table></div></section>";
-} else {
-
-    $marks = [];
-    foreach ($rows as $r) {
-        $marks[$r["student_id"]][$r["kind"]] = $r["grade"];
-    }
-    echo '<section class="panel"><p class="cab-note">Нажмите на результат для выставления или подтверждения изменения.</p><div class="cab-scroll"><table class="cab-table"><thead><tr><th>Студент</th>';
-    foreach ($kinds as $label) {
-        echo "<th>" . ch($label) . "</th>";
-    }
-    echo "</tr></thead><tbody>";
-    foreach ($roster as $id => $fio) {
-        if ($student && $student !== (int) $id) {
-            continue;
-        }
-        echo "<tr><td>" . ch($fio) . "</td>";
-        foreach ($kinds as $kind => $label) {
-            $value = $marks[$id][$kind] ?? null;
-            $data = [
-                "kind" => $kind,
-                "period" => $start,
-                "group" => $group,
-                "subject" => $subject,
-                "student" => $id,
-                "previous" => $value,
-            ];
-            echo '<td><button type="button" class="cab-button" data-final="' .
-                ch(json_encode($data, JSON_UNESCAPED_UNICODE)) .
-                '">' .
-                ch($value ?? "+") .
-                "</button></td>";
-        }
-        echo "</tr>";
-    }
-    echo "</tbody></table></div></section>";
-
+$marks = [];
+foreach ($rows as $r) {
+    $marks[$r["student_id"]][$r["kind"]] = $r;
 }
+$records = [];
+foreach ($roster as $id => $fio) {
+    if ($student && $student !== (int) $id) {
+        continue;
+    }
+    foreach ($kinds as $kind => $label) {
+        $entry = $marks[$id][$kind] ?? [];
+        $data = [
+            "kind" => $kind,
+            "period" => $start,
+            "group" => $group,
+            "subject" => $subject,
+            "student" => $id,
+            "previous" => $entry["grade"] ?? null,
+        ];
+        $records[] = $entry + [
+            "subject" => $subjects[$subject] ?? "",
+            "fio" => $profile["fio"],
+            "student_name" => $fio,
+            "period_start" => $start,
+            "kind" => $kind,
+            "_edit" => $data,
+        ];
+    }
+}
+cabRecordBook($records, true);
 
     }
 });

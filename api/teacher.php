@@ -1,22 +1,23 @@
 <?php
 
-const TEACHER_GRADE_VALUES = ['2', '3', '4', '5', 'н'];
-const TEACHER_RESULT_VALUES = ['2', '3', '4', '5', 'н/а'];
-const TEACHER_LESSON_TYPES = ['Лекция', 'Практическая', 'Экзамен'];
+const TEACHER_GRADE_VALUES = ["2", "3", "4", "5", "н"];
+const TEACHER_RESULT_VALUES = ["2", "3", "4", "5", "н/а"];
+const TEACHER_LESSON_TYPES = ["Лекция", "Практическая", "Экзамен"];
 const TEACHER_ATTESTATION_TYPES = [
-    'month' => 'За месяц',
-    'semester' => 'За семестр',
-    'exam' => 'Экзамен',
-    'diff' => 'Дифзачёт',
-    'credit' => 'Зачёт',
+    "month" => "За месяц",
+    "semester" => "За семестр",
+    "exam" => "Экзамен",
+    "diff" => "Дифзачёт",
+    "credit" => "Зачёт",
 ];
 
-final class TeacherRequestError extends RuntimeException
-{
-}
+final class TeacherRequestError extends RuntimeException {}
 
-function teacherQuery(PDO $db, string $sql, array $parameters = []): PDOStatement
-{
+function teacherQuery(
+    PDO $db,
+    string $sql,
+    array $parameters = [],
+): PDOStatement {
     $query = $db->prepare($sql);
     $query->execute($parameters);
     return $query;
@@ -29,187 +30,445 @@ function teacherRows(PDO $db, string $sql, array $parameters = []): array
 
 function teacherProfile(PDO $db, int $authId): ?array
 {
-    $profiles = teacherRows($db, <<<'SQL'
+    $profiles = teacherRows(
+        $db,
+        <<<'SQL'
         SELECT t.id, t.fio
         FROM public.teachers t
         WHERE t.auth_id = ?
         ORDER BY t.id
         LIMIT 2
-        SQL, [$authId]);
+        SQL
+        ,
+        [$authId],
+    );
 
     return count($profiles) === 1 ? $profiles[0] : null;
 }
 
 function teacherId(mixed $value): int
 {
-    $id = filter_var($value, FILTER_VALIDATE_INT, ['options' => ['min_range' => 1, 'max_range' => 2147483647]]);
+    $id = filter_var($value, FILTER_VALIDATE_INT, [
+        "options" => ["min_range" => 1, "max_range" => 2147483647],
+    ]);
     if ($id === false) {
-        throw new TeacherRequestError('Некорректный идентификатор.', 400);
+        throw new TeacherRequestError("Некорректный идентификатор.", 400);
     }
     return $id;
 }
 
 function teacherLockStudent(PDO $db, int $student, int $group): void
 {
-    if (!teacherQuery($db, 'SELECT id FROM public.students WHERE id = ? AND in_group = ? FOR SHARE', [$student, $group])->fetchColumn()) {
-        throw new TeacherRequestError('Студент не входит в выбранную группу.', 404);
+    if (
+        !teacherQuery(
+            $db,
+            "SELECT id FROM public.students WHERE id = ? AND in_group = ? FOR SHARE",
+            [$student, $group],
+        )->fetchColumn()
+    ) {
+        throw new TeacherRequestError(
+            "Студент не входит в выбранную группу.",
+            404,
+        );
     }
 }
 
 function teacherSave(PDO $db, int $teacher, array $input): string
 {
-    $action = $input['action'] ?? '';
-    if ($action === 'attestation') {
+    $action = $input["action"] ?? "";
+    if (
+        in_array(
+            $action,
+            ["attestation", "attestation_delete", "result_details"],
+            true,
+        )
+    ) {
         return teacherSaveAttestation($db, $teacher, $input);
     }
 
-    if (!in_array($action, ['lesson', 'grade_add', 'grade_edit'], true)) {
-        throw new TeacherRequestError('Неизвестное действие.', 400);
+    if (
+        !in_array(
+            $action,
+            ["lesson", "grade_add", "grade_edit", "grade_delete"],
+            true,
+        )
+    ) {
+        throw new TeacherRequestError("Неизвестное действие.", 400);
     }
 
-    $lessonId = teacherId($input['lesson'] ?? null);
-    $lesson = teacherQuery($db, <<<'SQL'
+    $lessonId = teacherId($input["lesson"] ?? null);
+    $lesson = teacherQuery(
+        $db,
+        <<<'SQL'
         SELECT l.in_group, l.subject, l.topic, l.lesson_type, t.name AS topic_name
         FROM public.lessons l
         JOIN public.lesson_topics t ON t.id = l.topic
         WHERE l.id = ? AND l.teacher = ?
         FOR UPDATE OF l
-        SQL, [$lessonId, $teacher])->fetch(PDO::FETCH_ASSOC);
+        SQL
+        ,
+        [$lessonId, $teacher],
+    )->fetch(PDO::FETCH_ASSOC);
     if (!$lesson) {
-        throw new TeacherRequestError('Занятие не найдено в вашем расписании.', 404);
+        throw new TeacherRequestError(
+            "Занятие не найдено в вашем расписании.",
+            404,
+        );
     }
 
-    if ($action === 'lesson') {
+    if ($action === "lesson") {
         return teacherSaveLesson($db, $lessonId, $lesson, $input);
     }
 
-    $student = teacherId($input['student'] ?? null);
-    teacherLockStudent($db, $student, (int) $lesson['in_group']);
+    $student = teacherId($input["student"] ?? null);
+    teacherLockStudent($db, $student, (int) $lesson["in_group"]);
 
-    if ($action === 'grade_add') {
-        $grades = $input['grades'] ?? null;
-        if (!is_array($grades) || !array_is_list($grades) || count($grades) < 1 || count($grades) > 10
-            || (in_array('н', $grades, true) && count($grades) !== 1)) {
-            throw new TeacherRequestError('Выберите от одной до десяти оценок или одну отметку «н».', 400);
+    if ($action === "grade_add") {
+        $grades = $input["grades"] ?? null;
+        if (
+            !is_array($grades) ||
+            !array_is_list($grades) ||
+            count($grades) < 1 ||
+            count($grades) > 10 ||
+            (in_array("н", $grades, true) && count($grades) !== 1)
+        ) {
+            throw new TeacherRequestError(
+                "Выберите от одной до десяти оценок или одну отметку «н».",
+                400,
+            );
         }
         foreach ($grades as $grade) {
             if (!in_array($grade, TEACHER_GRADE_VALUES, true)) {
-                throw new TeacherRequestError('Выберите допустимую отметку.', 400);
+                throw new TeacherRequestError(
+                    "Выберите допустимую отметку.",
+                    400,
+                );
             }
         }
 
-        $currentGrades = teacherQuery($db, <<<'SQL'
+        $currentGrades = teacherQuery(
+            $db,
+            <<<'SQL'
             SELECT grade FROM public.evaluations
             WHERE lesson_id = ? AND student_id = ? AND NULLIF(BTRIM(grade), '') IS NOT NULL
-            SQL, [$lessonId, $student])->fetchAll(PDO::FETCH_COLUMN);
-        if (count($currentGrades) !== ($input['expectedCount'] ?? null)) {
-            throw new TeacherRequestError('Ячейка уже изменилась. Обновите страницу и проверьте оценки.', 409);
+            SQL
+            ,
+            [$lessonId, $student],
+        )->fetchAll(PDO::FETCH_COLUMN);
+        if (count($currentGrades) !== ($input["expectedCount"] ?? null)) {
+            throw new TeacherRequestError(
+                "Ячейка уже изменилась. Обновите страницу и проверьте оценки.",
+                409,
+            );
         }
-        if (array_intersect($currentGrades, ['н', 'Н']) || ($currentGrades && in_array('н', $grades, true))) {
-            throw new TeacherRequestError('Для этой пары используйте оценки или одну отметку «н». Существующую отметку можно исправить.', 400);
+        if (
+            array_intersect($currentGrades, ["н", "Н"]) ||
+            ($currentGrades && in_array("н", $grades, true))
+        ) {
+            throw new TeacherRequestError(
+                "Для этой пары используйте оценки или одну отметку «н». Существующую отметку можно исправить.",
+                400,
+            );
         }
 
-        $insert = $db->prepare('INSERT INTO public.evaluations (lesson_id, student_id, grade) VALUES (?, ?, ?)');
+        $insert = $db->prepare(
+            "INSERT INTO public.evaluations (lesson_id, student_id, grade) VALUES (?, ?, ?)",
+        );
         foreach ($grades as $grade) {
             $insert->execute([$lessonId, $student, $grade]);
         }
-        return count($grades) === 1 ? 'Отметка сохранена.' : 'Оценки сохранены.';
+        return count($grades) === 1
+            ? "Отметка сохранена."
+            : "Оценки сохранены.";
     }
 
-    $grade = $input['grade'] ?? null;
-    $previous = $input['previous'] ?? null;
-    if (!in_array($grade, TEACHER_GRADE_VALUES, true) || !is_string($previous)) {
-        throw new TeacherRequestError('Выберите допустимую отметку.', 400);
+    if ($action === "grade_delete") {
+        $previous = $input["previous"] ?? null;
+        if (!in_array($previous, TEACHER_GRADE_VALUES, true)) {
+            throw new TeacherRequestError("Некорректная отметка.", 400);
+        }
+        $deleted = teacherQuery(
+            $db,
+            "DELETE FROM public.evaluations WHERE id = ? AND lesson_id = ? AND student_id = ? AND grade = ?",
+            [
+                teacherId($input["entry"] ?? null),
+                $lessonId,
+                $student,
+                $previous,
+            ],
+        );
+        if ($deleted->rowCount() !== 1) {
+            throw new TeacherRequestError(
+                "Отметка уже изменилась. Обновите страницу.",
+                409,
+            );
+        }
+        return "Отметка удалена.";
     }
-    $gradeId = teacherId($input['entry'] ?? null);
-    if ($grade === 'н' && teacherQuery($db, <<<'SQL'
-        SELECT id FROM public.evaluations
-        WHERE lesson_id = ? AND student_id = ? AND id <> ? AND NULLIF(BTRIM(grade), '') IS NOT NULL
-        LIMIT 1
-        SQL, [$lessonId, $student, $gradeId])->fetchColumn()) {
-        throw new TeacherRequestError('В ячейке уже есть другие оценки. «н» можно поставить как единственную отметку.', 400);
+
+    $grade = $input["grade"] ?? null;
+    $previous = $input["previous"] ?? null;
+    if (
+        !in_array($grade, TEACHER_GRADE_VALUES, true) ||
+        !is_string($previous)
+    ) {
+        throw new TeacherRequestError("Выберите допустимую отметку.", 400);
     }
-    $updated = teacherQuery($db, <<<'SQL'
+    $gradeId = teacherId($input["entry"] ?? null);
+    if (
+        $grade === "н" &&
+        teacherQuery(
+            $db,
+            <<<'SQL'
+            SELECT id FROM public.evaluations
+            WHERE lesson_id = ? AND student_id = ? AND id <> ? AND NULLIF(BTRIM(grade), '') IS NOT NULL
+            LIMIT 1
+            SQL
+            ,
+            [$lessonId, $student, $gradeId],
+        )->fetchColumn()
+    ) {
+        throw new TeacherRequestError(
+            "В ячейке уже есть другие оценки. «н» можно поставить как единственную отметку.",
+            400,
+        );
+    }
+    $updated = teacherQuery(
+        $db,
+        <<<'SQL'
         UPDATE public.evaluations SET grade = ?
         WHERE id = ? AND lesson_id = ? AND student_id = ? AND grade = ?
-        SQL, [$grade, $gradeId, $lessonId, $student, $previous]);
+        SQL
+        ,
+        [$grade, $gradeId, $lessonId, $student, $previous],
+    );
     if ($updated->rowCount() !== 1) {
-        throw new TeacherRequestError('Оценка уже изменилась. Обновите страницу и проверьте ячейку.', 409);
+        throw new TeacherRequestError(
+            "Оценка уже изменилась. Обновите страницу и проверьте ячейку.",
+            409,
+        );
     }
 
-    return 'Изменение оценки сохранено.';
+    return "Изменение оценки сохранено.";
 }
 
-function teacherSaveLesson(PDO $db, int $lessonId, array $lesson, array $input): string
-{
-    $topicId = teacherId($input['topic'] ?? null);
-    $topic = teacherQuery($db, 'SELECT id, lesson_type FROM public.lesson_topics WHERE id = ? AND subj_id = ?', [$topicId, $lesson['subject']])->fetch(PDO::FETCH_ASSOC);
+function teacherSaveLesson(
+    PDO $db,
+    int $lessonId,
+    array $lesson,
+    array $input,
+): string {
+    $topicId = teacherId($input["topic"] ?? null);
+    $topic = teacherQuery(
+        $db,
+        "SELECT id, lesson_type FROM public.lesson_topics WHERE id = ? AND subj_id = ?",
+        [$topicId, $lesson["subject"]],
+    )->fetch(PDO::FETCH_ASSOC);
     if (!$topic) {
-        throw new TeacherRequestError('Выберите тему из списка тем этого предмета.', 400);
+        throw new TeacherRequestError(
+            "Выберите тему из списка тем этого предмета.",
+            400,
+        );
     }
-    $type = $topic['lesson_type'] ?? ($input['type'] ?? null);
+    $type = $topic["lesson_type"] ?? ($input["type"] ?? null);
     if (!in_array($type, TEACHER_LESSON_TYPES, true)) {
-        throw new TeacherRequestError('Для темы без заданного вида выберите вид занятия.', 400);
+        throw new TeacherRequestError(
+            "Для темы без заданного вида выберите вид занятия.",
+            400,
+        );
     }
-    if ($lesson['topic_name'] !== ($input['previousTopic'] ?? null)
-        || ($lesson['lesson_type'] ?? '') !== ($input['previousType'] ?? null)) {
-        throw new TeacherRequestError('Занятие уже изменилось. Обновите страницу и проверьте данные.', 409);
+    if (
+        $lesson["topic_name"] !== ($input["previousTopic"] ?? null) ||
+        ($lesson["lesson_type"] ?? "") !== ($input["previousType"] ?? null)
+    ) {
+        throw new TeacherRequestError(
+            "Занятие уже изменилось. Обновите страницу и проверьте данные.",
+            409,
+        );
     }
-    teacherQuery($db, 'UPDATE public.lessons SET topic = ?, lesson_type = ? WHERE id = ?', [$topicId, $type, $lessonId]);
-    return 'Тема и вид занятия сохранены.';
+    teacherQuery(
+        $db,
+        "UPDATE public.lessons SET topic = ?, lesson_type = ? WHERE id = ?",
+        [$topicId, $type, $lessonId],
+    );
+    return "Тема и вид занятия сохранены.";
 }
 
 function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
 {
-    $kind = $input['kind'] ?? '';
-    $grade = $input['grade'] ?? null;
-    $previous = $input['previous'] ?? null;
-    $period = $input['period'] ?? null;
-    if (!is_string($kind) || !isset(TEACHER_ATTESTATION_TYPES[$kind])
-        || !in_array($grade, $kind === 'credit' ? ['зачтено', 'не зачтено', 'н/а'] : TEACHER_RESULT_VALUES, true)
-        || ($previous !== null && !in_array($previous, $kind === 'credit' ? ['зачтено', 'не зачтено', 'н/а'] : TEACHER_RESULT_VALUES, true))
-        || !is_string($period) || !preg_match('/\A([1-9][0-9]{3})-(0[1-9]|1[0-2])-01\z/', $period, $parts)) {
-        throw new TeacherRequestError('Некорректные данные аттестации.', 400);
+    $kind = $input["kind"] ?? "";
+    $grade = $input["grade"] ?? null;
+    $previous = $input["previous"] ?? null;
+    $period = $input["period"] ?? null;
+    if (
+        !is_string($kind) ||
+        !isset(TEACHER_ATTESTATION_TYPES[$kind]) ||
+        !in_array(
+            $grade,
+            $kind === "credit"
+                ? ["зачтено", "не зачтено", "н/а"]
+                : TEACHER_RESULT_VALUES,
+            true,
+        ) ||
+        ($previous !== null &&
+            !in_array(
+                $previous,
+                $kind === "credit"
+                    ? ["зачтено", "не зачтено", "н/а"]
+                    : TEACHER_RESULT_VALUES,
+                true,
+            )) ||
+        !is_string($period) ||
+        !preg_match("/\A([1-9][0-9]{3})-(0[1-9]|1[0-2])-01\z/", $period, $parts)
+    ) {
+        throw new TeacherRequestError("Некорректные данные аттестации.", 400);
     }
 
     $month = (int) $parts[2];
-    if (($kind === 'month' && in_array($month, [7, 8], true))
-        || ($kind !== 'month' && !in_array($month, [1, 9], true))) {
-        throw new TeacherRequestError('Выберите учебный месяц или семестр.', 400);
+    if (
+        ($kind === "month" && in_array($month, [7, 8], true)) ||
+        ($kind !== "month" && !in_array($month, [1, 9], true))
+    ) {
+        throw new TeacherRequestError(
+            "Выберите учебный месяц или семестр.",
+            400,
+        );
     }
 
-    $student = teacherId($input['student'] ?? null);
-    $group = teacherId($input['group'] ?? null);
-    $subject = teacherId($input['subject'] ?? null);
+    $student = teacherId($input["student"] ?? null);
+    $group = teacherId($input["group"] ?? null);
+    $subject = teacherId($input["subject"] ?? null);
     $year = (int) $parts[1] - ($month <= 6 ? 1 : 0);
 
-    if (!teacherQuery($db, <<<'SQL'
-        SELECT id FROM public.lessons
-        WHERE teacher = ? AND in_group = ? AND subject = ? AND date >= ? AND date < ?
-        LIMIT 1
-        SQL, [$teacher, $group, $subject, "$year-09-01", ($year + 1) . '-07-01'])->fetchColumn()) {
-        throw new TeacherRequestError('В этом учебном году у вас нет занятий по предмету в выбранной группе.', 404);
+    if (
+        !teacherQuery(
+            $db,
+            <<<'SQL'
+            SELECT id FROM public.lessons
+            WHERE teacher = ? AND in_group = ? AND subject = ? AND date >= ? AND date < ?
+            LIMIT 1
+            SQL
+            ,
+            [$teacher, $group, $subject, "$year-09-01", $year + 1 . "-07-01"],
+        )->fetchColumn()
+    ) {
+        throw new TeacherRequestError(
+            "В этом учебном году у вас нет занятий по предмету в выбранной группе.",
+            404,
+        );
     }
     teacherLockStudent($db, $student, $group);
 
     $key = [$teacher, $group, $subject, $period, $kind, $student];
+    if (($input["action"] ?? "") === "attestation_delete") {
+        if ($previous === null) {
+            throw new TeacherRequestError(
+                "Отметка уже удалена. Обновите страницу.",
+                409,
+            );
+        }
+        $deleted = teacherQuery(
+            $db,
+            "DELETE FROM public.teacher_attestations WHERE teacher_id=? AND group_id=? AND subject_id=? AND period_start=? AND kind=? AND student_id=? AND grade=?",
+            [...$key, $previous],
+        );
+        if ($deleted->rowCount() !== 1) {
+            throw new TeacherRequestError(
+                "Отметка уже изменилась. Обновите страницу.",
+                409,
+            );
+        }
+        return "Отметка удалена.";
+    }
+    if (($input["action"] ?? "") === "result_details") {
+        if (
+            !in_array($kind, ["exam", "diff", "credit"], true) ||
+            $previous === null
+        ) {
+            throw new TeacherRequestError(
+                "Сначала выставьте итоговую отметку.",
+                400,
+            );
+        }
+        $hours = $input["hours"] ?? "";
+        $hours =
+            $hours === ""
+                ? null
+                : filter_var($hours, FILTER_VALIDATE_INT, [
+                    "options" => ["min_range" => 0, "max_range" => 10000],
+                ]);
+        $date = $input["assessed_on"] ?? "";
+        $parsed = is_string($date)
+            ? DateTimeImmutable::createFromFormat("!Y-m-d", $date)
+            : false;
+        $statement = $input["statement_number"] ?? "";
+        if (
+            $hours === false ||
+            !is_string($date) ||
+            ($date !== "" &&
+                (!$parsed || $parsed->format("Y-m-d") !== $date)) ||
+            !is_string($statement) ||
+            strlen($statement) > 200 ||
+            !is_array($input["expectedDetails"] ?? null)
+        ) {
+            throw new TeacherRequestError(
+                "Проверьте часы, дату и номер ведомости.",
+                400,
+            );
+        }
+        $expected = $input["expectedDetails"];
+        $updated = teacherQuery(
+            $db,
+            "UPDATE public.teacher_attestations SET hours=?,assessed_on=?,statement_number=? WHERE teacher_id=? AND group_id=? AND subject_id=? AND period_start=? AND kind=? AND student_id=? AND grade=? AND hours IS NOT DISTINCT FROM ?::integer AND assessed_on IS NOT DISTINCT FROM ?::date AND statement_number IS NOT DISTINCT FROM ?::text",
+            [
+                $hours,
+                $date ?: null,
+                trim($statement) ?: null,
+                ...$key,
+                $previous,
+                $expected["hours"] ?? null,
+                $expected["assessed_on"] ?? null,
+                $expected["statement_number"] ?? null,
+            ],
+        );
+        if ($updated->rowCount() !== 1) {
+            throw new TeacherRequestError(
+                "Запись уже изменилась. Обновите страницу.",
+                409,
+            );
+        }
+        return "Сведения сохранены.";
+    }
     if ($previous === null) {
-        $saved = teacherQuery($db, <<<'SQL'
+        $saved = teacherQuery(
+            $db,
+            <<<'SQL'
             INSERT INTO public.teacher_attestations
                 (teacher_id, group_id, subject_id, period_start, kind, student_id, grade)
             VALUES (?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT DO NOTHING
-            SQL, [...$key, $grade]);
+            SQL
+            ,
+            [...$key, $grade],
+        );
     } else {
-        $saved = teacherQuery($db, <<<'SQL'
+        $saved = teacherQuery(
+            $db,
+            <<<'SQL'
             UPDATE public.teacher_attestations SET grade = ?
             WHERE teacher_id = ? AND group_id = ? AND subject_id = ? AND period_start = ?
               AND kind = ? AND student_id = ? AND grade = ?
-            SQL, [$grade, ...$key, $previous]);
+            SQL
+            ,
+            [$grade, ...$key, $previous],
+        );
     }
     if ($saved->rowCount() !== 1) {
-        throw new TeacherRequestError('Аттестация уже изменилась. Обновите страницу и проверьте ячейку.', 409);
+        throw new TeacherRequestError(
+            "Аттестация уже изменилась. Обновите страницу и проверьте ячейку.",
+            409,
+        );
     }
 
-    return 'Результат аттестации сохранён.';
+    return "Результат аттестации сохранён.";
 }

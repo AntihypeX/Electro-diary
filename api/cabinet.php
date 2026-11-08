@@ -77,10 +77,46 @@ function cabScope(PDO $db, array $user): ?array
 }
 function cabShell(string $role, array $user, string $tab, callable $body): void
 {
-    preg_match('/^./u', $user['name'] ?? $user['login'], $avatarInitial);
-    $nav = cabNav(
-        $role,
-    ); ?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= ch($nav[$tab] ?? "Кабинет") ?></title><link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>"><link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script><script src="<?= htmlspecialchars(cabinetAsset('grade-picker.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head><body class="cabinet"><div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div><div class="user-card"><span class="avatar"><?= ch($avatarInitial[0] ?? "Я") ?></span><div><b><?= ch($user["name"] ?? $user["login"]) ?></b><small><?= ch(["student" => "Студент", "teacher" => "Преподаватель", "secretary" => "Секретарь", "head" => "Заведующий отделением"][$role]) ?></small></div></div><nav><?php foreach ($nav as $key => $label): ?><a href="<?= $role ?>.php?tab=<?= $key ?>" title="<?= ch($label) ?>" <?= $tab === $key ? 'aria-current="page"' : "" ?>><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 14h8"/></svg><span><?= ch($label) ?></span></a><?php endforeach; ?></nav><form action="account.php" method="post" class="cab-logout"><input type="hidden" name="csrf" value="<?= ch($_SESSION["csrf_token"]) ?>"><button class="logout" name="action" value="logout">Выйти</button></form></aside><main class="content"><header class="topbar"><div><span class="breadcrumb">ЛИЧНЫЙ КАБИНЕТ</span><h1><?= ch($nav[$tab] ?? "Кабинет") ?></h1></div></header><div class="page-stack"><?php $body(); ?></div></main></div></body></html><?php
+    preg_match("/^./u", $user["name"] ?? $user["login"], $avatarInitial);
+    $nav = cabNav($role);
+    $today = new DateTimeImmutable(
+        "today",
+        new DateTimeZone("Asia/Novosibirsk"),
+    );
+    $year =
+        filter_var($_GET["year"] ?? null, FILTER_VALIDATE_INT, [
+            "options" => ["min_range" => 1900, "max_range" => 9998],
+        ]) ?:
+        (int) $today->format("Y") - ((int) $today->format("n") < 9 ? 1 : 0);
+    ?><!doctype html><html lang="ru"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title><?= ch($nav[$tab] ?? "Кабинет") ?></title><link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset("index.css"), ENT_QUOTES, "UTF-8") ?>"><?php if ($role === "teacher"): ?><link rel="stylesheet" href="<?= ch(cabinetAsset("teacher.css")) ?>"><?php endif; ?><link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset("cabinet.css"), ENT_QUOTES, "UTF-8") ?>"><script src="<?= htmlspecialchars(cabinetAsset("cabinet.js"), ENT_QUOTES, "UTF-8") ?>" defer></script><script src="<?= htmlspecialchars(cabinetAsset("grade-picker.js"), ENT_QUOTES, "UTF-8") ?>" defer></script></head><body class="cabinet<?= $role === "teacher" ? " teacher" : "" ?>"><div class="app-shell"><aside class="sidebar"><div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div><div class="user-card"><span class="avatar"><?= ch($avatarInitial[0] ?? "Я") ?></span><div><b><?= ch($user["name"] ?? $user["login"]) ?></b><small><?= ch(["student" => "Студент", "teacher" => "Преподаватель", "secretary" => "Секретарь", "head" => "Заведующий отделением"][$role]) ?></small></div></div><?php if (
+    $role === "teacher"
+) {
+    cabinetTeacherNav(
+        $tab,
+        array_intersect_key(
+            $_GET,
+            array_flip([
+                "year",
+                "semester",
+                "month",
+                "group",
+                "subject",
+                "student",
+            ]),
+        ),
+    );
+} else {
+     ?><nav><?php foreach (
+    $nav
+    as $key => $label
+): ?><a href="<?= $role ?>.php?tab=<?= $key ?>" title="<?= ch(
+    $label,
+) ?>" <?= $tab === $key
+    ? 'aria-current="page"'
+    : "" ?>><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" aria-hidden="true"><rect x="4" y="4" width="16" height="16" rx="2"/><path d="M8 9h8M8 14h8"/></svg><span><?= ch(
+    $label,
+) ?></span></a><?php endforeach; ?></nav><?php
+} ?><form action="account.php" method="post" class="cab-logout"><input type="hidden" name="csrf" value="<?= ch($_SESSION["csrf_token"]) ?>"><button class="logout" name="action" value="logout" title="Выйти" aria-label="Выйти"><?php if ($role === "teacher"): ?><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg><?php endif; ?><span>Выйти</span></button></form></aside><main class="content"><header class="topbar"><div><span class="breadcrumb">ЛИЧНЫЙ КАБИНЕТ<?= $role === "teacher" ? " / ПРЕПОДАВАТЕЛЬ" : "" ?></span><h1><?= ch($nav[$tab] ?? "Кабинет") ?></h1></div><?php if ($role === "teacher"): ?><div class="date-block"><span>УЧЕБНЫЙ ГОД</span><b><?= $year ?>–<?= $year + 1 ?></b></div><?php endif; ?></header><div class="page-stack"><?php $body(); ?></div></main></div></body></html><?php
 }
 function cabSchedule(PDO $db, string $role, array $profile): void
 {
@@ -119,6 +155,183 @@ foreach ($rows as $row): ?><article class="cab-pair"><strong><?= ch(
         " · " .
         ($row["lesson_type"] ?? ""),
 ) ?></small></div></article><?php endforeach;?></section><?php
+}
+
+/** A row per discipline and assessment, grouped by academic year / semester. */
+function cabResultState(array $entry): array
+{
+    return [
+        "key" => $entry["_edit"],
+        "details" => [
+            "hours" => $entry["hours"] ?? null,
+            "assessed_on" => $entry["assessed_on"] ?? null,
+            "statement_number" => $entry["statement_number"] ?? null,
+        ],
+        "student" => $entry["student_name"],
+        "subject" => $entry["subject"],
+        "kind" => [
+            "exam" => "Экзамен",
+            "diff" => "Диф. зачёт",
+            "credit" => "Зачёт",
+        ][$entry["kind"]],
+        "grade" => $entry["grade"] ?? null,
+        "date" => !empty($entry["assessed_on"])
+            ? (new DateTimeImmutable($entry["assessed_on"]))->format("d.m.Y")
+            : "—",
+    ];
+}
+
+function cabRecordBook(array $records, bool $editable = false): void
+{
+    $kinds = ["exam" => "Экзамен", "diff" => "Диф. зачёт", "credit" => "Зачёт"];
+    if ($editable) {
+        $students = [];
+        foreach ($records as $entry) {
+            $key = implode(":", [
+                $entry["_edit"]["student"],
+                $entry["_edit"]["group"],
+                $entry["_edit"]["subject"],
+                $entry["period_start"],
+            ]);
+            $students[$key][$entry["kind"]] = $entry;
+        }
+        $records = [];
+        foreach ($students as $variants) {
+            $entry = $variants["exam"] ?? reset($variants);
+            $entry["_variants"] = array_map("cabResultState", $variants);
+            $records[] = $entry;
+        }
+    }
+    $years = [];
+    foreach ($records as $entry) {
+        $month = (int) substr($entry["period_start"], 5, 2);
+        $year =
+            (int) substr($entry["period_start"], 0, 4) - ($month < 9 ? 1 : 0);
+        $years[$year][$month >= 9 ? 1 : 2][] = $entry;
+    }
+    ksort($years);
+    echo '<section class="panel record-book"><header class="panel-head"><h3>Зачётная книжка</h3><span class="count">Итоговые оценки</span></header>';
+    if (!$years) {
+        echo '<p class="cab-empty">По выбранным фильтрам результатов нет.</p></section>';
+        return;
+    }
+    if ($editable) {
+        echo '<p class="cab-note">Выберите форму контроля в строке студента. Нажмите на отметку, чтобы выставить, изменить или удалить её. Оценки и сведения каждого вида сохраняются отдельно.</p>';
+    }
+    foreach ($years as $year => $semesters) {
+        echo '<div class="record-year"><h3>' .
+            $year .
+            "–" .
+            ($year + 1) .
+            " учебный год</h3>";
+        ksort($semesters);
+        foreach ($semesters as $semester => $entries) {
+            echo '<section class="record-semester"><h4>' .
+                $semester .
+                '-й семестр</h4><div class="cab-scroll"><table class="cab-table record-table"><thead><tr><th scope="col">№</th>';
+            if ($editable) {
+                echo '<th scope="col">Студент</th>';
+            }
+            echo '<th scope="col">Дисциплина</th><th scope="col">Кол-во часов</th><th scope="col">Ф. И. О. преподавателя</th><th scope="col">Оценка</th><th scope="col">Ведомость</th><th scope="col">Дата</th><th scope="col">Форма контроля</th>';
+            if ($editable) {
+                echo '<th scope="col">Сведения</th>';
+            }
+            echo "</tr></thead><tbody>";
+            foreach ($entries as $index => $entry) {
+                $state = $editable ? cabResultState($entry) : null;
+                echo "<tr" .
+                    ($editable
+                        ? ' data-control-records="' .
+                            ch(
+                                json_encode(
+                                    $entry["_variants"],
+                                    JSON_UNESCAPED_UNICODE,
+                                ),
+                            ) .
+                            '"'
+                        : "") .
+                    "><td>" .
+                    ($index + 1) .
+                    "</td>";
+                if ($editable) {
+                    echo '<td class="record-person">' .
+                        ch($entry["student_name"]) .
+                        "</td>";
+                }
+                echo '<td class="record-subject">' .
+                    ch($entry["subject"]) .
+                    '</td><td data-record-field="hours">' .
+                    ch($entry["hours"] ?? "—") .
+                    '</td><td class="record-person">' .
+                    ch($entry["fio"]) .
+                    "</td><td>";
+                if ($editable) {
+                    echo '<button type="button" class="cab-button record-mark" data-final="' .
+                        ch(
+                            json_encode(
+                                $entry["_edit"],
+                                JSON_UNESCAPED_UNICODE,
+                            ),
+                        ) .
+                        '" aria-label="' .
+                        ch(
+                            "Отметка: " .
+                                $entry["student_name"] .
+                                ", " .
+                                $kinds[$entry["kind"]],
+                        ) .
+                        '">' .
+                        ch($entry["grade"] ?? "+") .
+                        "</button>";
+                } else {
+                    echo '<span class="grade record-mark">' .
+                        ch($entry["grade"]) .
+                        "</span>";
+                }
+                $date = !empty($entry["assessed_on"])
+                    ? (new DateTimeImmutable($entry["assessed_on"]))->format(
+                        "d.m.Y",
+                    )
+                    : "—";
+                echo '</td><td data-record-field="statement_number">' .
+                    ch($entry["statement_number"] ?? "—") .
+                    '</td><td class="record-date" data-record-field="date">' .
+                    ch($date) .
+                    "</td><td>";
+                if ($editable) {
+                    echo '<select class="record-control" data-control-kind aria-label="' .
+                        ch("Форма контроля: " . $entry["student_name"]) .
+                        '">';
+                    foreach ($kinds as $kind => $label) {
+                        echo '<option value="' .
+                            $kind .
+                            '"' .
+                            ($kind === $entry["kind"] ? " selected" : "") .
+                            ">" .
+                            ch($label) .
+                            "</option>";
+                    }
+                    echo "</select>";
+                } else {
+                    echo ch($kinds[$entry["kind"]]);
+                }
+                echo "</td>";
+                if ($editable) {
+                    echo '<td><button type="button" class="cab-button" data-result-details="' .
+                        ch(json_encode($state, JSON_UNESCAPED_UNICODE)) .
+                        '"' .
+                        (isset($entry["grade"])
+                            ? ""
+                            : ' disabled title="Сначала выставьте отметку"') .
+                        ">Заполнить</button></td>";
+                }
+                echo "</tr>";
+            }
+            echo "</tbody></table></div></section>";
+        }
+        echo "</div>";
+    }
+    echo "</section>";
 }
 
 function cabStudentResults(PDO $db, array $profile, string $tab): void
@@ -175,10 +388,12 @@ cabSelect("subject", "Предмет", [0 => "Все предметы"] + $subje
 if ($tab === "finals") {
     cabSelect("kind", "Вид результата", ["" => "Все виды"] + $kinds, $kind);
 }
-?><?= cabinetResetLink(); ?></form><?php
+cabinetResetLink();
+?></form><?php
 $columns = [];
 $entries = [];
 $shown = [];
+$filtered = [];
 foreach ($all as $entry) {
     $month = (int) substr($entry["period_start"], 5, 2);
     $entryYear =
@@ -192,6 +407,7 @@ foreach ($all as $entry) {
     ) {
         continue;
     }
+    $filtered[] = $entry;
     $key = $entry["period_start"] . "_" . $entry["kind"];
     $columns[$key] =
         $tab === "monthly"
@@ -207,6 +423,10 @@ foreach ($all as $entry) {
     $entries[$entry["subject_id"]][$key][] = $entry;
 }
 asort($shown);
+if ($tab === "finals") {
+    cabRecordBook($filtered);
+    return;
+}
 ?><section class="panel table-panel"><header class="panel-head"><h3><?= $tab === "monthly" ? "Аттестация за месяцы" : "Итоговые оценки" ?></h3><span class="count"><?= count($shown) ?> дисциплин</span></header><?php if (
      !$columns
  ): ?><p class="cab-empty">По выбранным фильтрам результатов нет.</p><?php else: ?><div class="matrix-container"><table class="matrix-table result-matrix"><thead><tr><th scope="col">Дисциплина</th><?php foreach (

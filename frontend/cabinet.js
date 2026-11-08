@@ -22,7 +22,7 @@ document.addEventListener("DOMContentLoaded", async () => {
     const dialog = document.createElement("dialog");
     dialog.className = "cab-avatar-dialog";
     dialog.innerHTML =
-      '<form><h2>Моя аватарка</h2><label>PNG, JPEG или WebP, до 2 МБ<input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" required></label><p role="alert"></p><div class="cab-actions"><button type="button">Отмена</button><button class="primary" type="submit">Сохранить</button></div></form>';
+      '<form><h2>Моя аватарка</h2><label>PNG, JPEG или WebP, до 2 МБ<span class="cab-file-control"><input type="file" name="avatar" accept="image/png,image/jpeg,image/webp" required></span></label><p role="alert"></p><div class="cab-actions"><button type="button" class="cab-button">Отмена</button><button class="primary" type="submit">Сохранить</button></div></form>';
     document.body.append(dialog);
     button.onclick = () => dialog.showModal();
     dialog.querySelector("[type=button]").onclick = () => dialog.close();
@@ -132,6 +132,66 @@ document
       if (input.form.method === "get") input.form.requestSubmit();
     });
   });
-document.querySelectorAll('.grade').forEach(badge=>{
-  if(badge.textContent.trim().length>1)badge.dataset.textResult='1';
+document.querySelectorAll(".grade").forEach((badge) => {
+  if (badge.textContent.trim().length > 1) badge.dataset.textResult = "1";
+});
+
+// Сведения ведомости редактируются отдельно от быстрой панели отметок.
+document.addEventListener("click", async (event) => {
+  const button = event.target.closest("[data-result-details]");
+  if (!button) return;
+  const record = JSON.parse(button.dataset.resultDetails);
+  const dialog = document.createElement("dialog");
+  dialog.className = "cab-avatar-dialog";
+  dialog.innerHTML =
+    '<form class="record-details-form"><h2>Сведения о результате</h2><p class="record-context"></p><label>Количество часов<input name="hours" type="number" min="0" max="10000"></label><label>Номер ведомости<input name="statement_number" maxlength="100"></label><label>Дата выставления<input type="date" name="assessed_on"></label><p role="alert"></p><div class="cab-actions"><button type="button" class="cab-button">Отмена</button><button type="submit" class="primary">Сохранить</button></div></form>';
+  const form = dialog.querySelector("form");
+  dialog.querySelector(".record-context").textContent =
+    record.student + " · " + record.subject + " · " + record.kind;
+  for (const [name, value] of Object.entries(record.details))
+    form.elements[name].value = value ?? "";
+  dialog.querySelector("[type=button]").onclick = () => dialog.close();
+  let saving = false;
+  dialog.addEventListener("cancel", (event) => {
+    if (saving) event.preventDefault();
+  });
+  dialog.addEventListener("close", () => {
+    dialog.remove();
+    button.focus({ preventScroll: true });
+  });
+  form.onsubmit = async (event) => {
+    event.preventDefault();
+    if (saving) return;
+    saving = true;
+    dialog.querySelectorAll("button").forEach((b) => (b.disabled = true));
+    try {
+      const account = await fetch("account.php").then((r) => r.json());
+      const payload = {
+        ...record.key,
+        action: "result_details",
+        grade: record.key.previous,
+        expectedDetails: record.details,
+      };
+      for (const name of ["hours", "statement_number", "assessed_on"])
+        payload[name] = form.elements[name].value;
+      const body = new FormData();
+      body.append("csrf", account.csrf);
+      body.append("payload", JSON.stringify(payload));
+      const response = await fetch(location.href, {
+        method: "POST",
+        headers: { Accept: "application/json" },
+        body,
+      });
+      const result = await response.json();
+      if (!response.ok || !result.ok)
+        throw new Error(result.error || "Не удалось сохранить.");
+      location.reload();
+    } catch (e) {
+      saving = false;
+      dialog.querySelector("[role=alert]").textContent = e.message;
+      dialog.querySelectorAll("button").forEach((b) => (b.disabled = false));
+    }
+  };
+  document.body.append(dialog);
+  dialog.showModal();
 });
