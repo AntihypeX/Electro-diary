@@ -1,4 +1,11 @@
 <?php
+
+$workspaceRole = 'secretary';
+if (in_array($_GET['tab'] ?? '', ['groups'], true)) {
+    require __DIR__ . '/workspace.php';
+    exit;
+}
+
 require_once __DIR__ . '/../api/current-user.php';
 require_once __DIR__ . '/../api/secretary.php';
 
@@ -194,10 +201,10 @@ function secRenderCollection(string $section, array $rows, array $specialties): 
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111111">
   <title><?= $tab === 'enroll' ? 'Зачисление' : 'Студенты' ?> — Кабинет секретаря</title>
-  <link rel="stylesheet" href="./index.css">
-  <link rel="stylesheet" href="./secretary.css">
-  <script src="./secretary.js" defer></script>
-</head>
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('secretary.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <script src="<?= htmlspecialchars(cabinetAsset('secretary.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
 <body class="secretary">
 <div class="app-shell">
   <aside class="sidebar">
@@ -206,7 +213,7 @@ function secRenderCollection(string $section, array $rows, array $specialties): 
     <nav aria-label="Кабинет секретаря">
       <a href="secretary.php" <?= $tab === 'students' ? 'aria-current="page"' : '' ?> title="Студенты"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/></svg><span>Студенты</span></a>
       <a href="secretary.php?tab=enroll" <?= $tab === 'enroll' ? 'aria-current="page"' : '' ?> title="Зачисление"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg><span>Зачисление</span></a>
-    </nav>
+    <a href="secretary.php?tab=groups" title="Группы"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Группы</span></a></nav>
     <form method="post" class="sec-logout"><input type="hidden" name="csrf" value="<?= sh($csrf) ?>"><input type="hidden" name="action" value="logout"><button class="logout" title="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg><span>Выйти</span></button></form>
   </aside>
   <main class="content">
@@ -227,8 +234,8 @@ function secRenderCollection(string $section, array $rows, array $specialties): 
             <label>Группа<select name="group"><option value="">Все группы</option><?php foreach ($filteredGroups as $group): ?><option value="<?= sh($group['id']) ?>" <?= (int) $group['id'] === $groupFilter ? 'selected' : '' ?>><?= sh($group['name']) ?></option><?php endforeach; ?></select></label>
             <label>Студент<select name="student"><option value="">Все студенты</option><?php foreach ($studentOptions as $id => $name): ?><option value="<?= sh($id) ?>" <?= (int) $id === $studentFilter ? 'selected' : '' ?>><?= sh($name) ?></option><?php endforeach; ?></select></label>
             <label>Статус<select name="status"><?php foreach (['active' => 'Обучается', 'expelled' => 'Отчислен', 'all' => 'Все'] as $key => $label): ?><option value="<?= $key ?>" <?= $key === $status ? 'selected' : '' ?>><?= $label ?></option><?php endforeach; ?></select></label>
-            <button class="primary" type="submit">Найти</button>
-          </form>
+            <button class="primary" type="submit" hidden>Найти</button>
+          <?= cabinetResetLink(); ?></form>
           <section class="panel">
             <header class="panel-head"><div><h3>Контингент студентов</h3></div><span class="count"><?= $count ?></span></header>
             <?php if (!$students): ?><p class="sec-empty">По выбранным фильтрам студентов нет.</p>

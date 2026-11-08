@@ -38,3 +38,16 @@ if (!function_exists('getCurrentUser')) {
         return $user;
     }
 }
+
+function cabinetAsset(string $file): string
+{
+    $path = __DIR__ . '/../frontend/' . $file;
+    return $file . '?v=' . substr(hash_file('sha256', $path), 0, 12);
+}
+
+function cabinetResetLink(): string
+{
+    $tab = is_string($_GET['tab'] ?? null) ? $_GET['tab'] : '';
+    $url = basename($_SERVER['SCRIPT_NAME']) . ($tab !== '' ? '?' . http_build_query(['tab' => $tab]) : '');
+    return '<a class="cab-button filter-reset" href="' . htmlspecialchars($url, ENT_QUOTES, 'UTF-8') . '">Сбросить фильтры</a>';
+}

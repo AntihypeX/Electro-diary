@@ -1,5 +1,12 @@
 <?php
 
+$workspaceRole = 'teacher';
+if (in_array($_GET['tab'] ?? '', ['schedule', 'finals'], true)) {
+    require __DIR__ . '/workspace.php';
+    exit;
+}
+
+
 require_once __DIR__ . '/../api/current-user.php';
 require_once __DIR__ . '/../api/teacher.php';
 
@@ -145,23 +152,27 @@ $loadError = '';
 if ($teacher) {
     try {
         if ($tab === 'home') {
-            $metrics = teacherQuery($db, <<<'SQL'
-                SELECT COUNT(*) FILTER (WHERE date = ?) AS today,
-                       COUNT(DISTINCT in_group) AS groups,
-                       COUNT(DISTINCT subject) AS subjects
-                FROM public.lessons
-                WHERE teacher = ? AND date >= ? AND date < ?
-                SQL, [$today->format('Y-m-d'), $teacher, "$currentYear-09-01", ($currentYear + 1) . '-07-01'])->fetch(PDO::FETCH_ASSOC);
-            $upcoming = teacherRows($db, $lessonListSql . '
-                AND l.date >= ? ORDER BY l.date, l.num_in_table, l.id LIMIT 5',
-                [$teacher, $today->format('Y-m-d')]);
-            $monthSummary = teacherQuery($db, <<<'SQL'
-                SELECT COUNT(*) FILTER (WHERE e.grade IN ('2', '3', '4', '5')) AS grades,
-                       COUNT(*) FILTER (WHERE e.grade IN ('н', 'Н')) AS absences
-                FROM public.evaluations e
-                JOIN public.lessons l ON l.id = e.lesson_id
-                WHERE l.teacher = ? AND l.date >= ? AND l.date <= ?
-                SQL, [$teacher, $today->format('Y-m-01'), $today->format('Y-m-d')])->fetch(PDO::FETCH_ASSOC);
+            $todayLessons = teacherRows($db, $lessonListSql . ' AND l.date = ? ORDER BY l.num_in_table,l.id', [$teacher,$today->format('Y-m-d')]);
+            $unfinished = teacherRows($db, <<<'SQL'
+                SELECT l.id,l.date,l.subject,l.in_group,l.num_in_table,g.name AS group_name,s.name AS subject_name,
+                    COUNT(st.id) AS missing
+                FROM public.lessons l
+                JOIN public.stud_groups g ON g.id=l.in_group
+                JOIN public.subjects s ON s.id=l.subject
+                JOIN public.students st ON st.in_group=l.in_group
+                WHERE l.teacher=? AND l.date>=? AND l.date<=?
+                  AND NOT EXISTS(SELECT 1 FROM public.evaluations e WHERE e.lesson_id=l.id AND e.student_id=st.id AND NULLIF(BTRIM(e.grade),'') IS NOT NULL)
+                GROUP BY l.id,g.name,s.name ORDER BY l.date DESC,l.num_in_table
+                SQL, [$teacher,$today->modify('-30 days')->format('Y-m-d'),$today->format('Y-m-d')]);
+            $attention = teacherRows($db, <<<'SQL'
+                SELECT st.id,st.fio,st.in_group,g.name AS group_name,
+                    COUNT(*) FILTER(WHERE e.grade='2') AS twos,
+                    COUNT(*) FILTER(WHERE e.grade IN ('н','Н')) AS absences
+                FROM public.evaluations e JOIN public.lessons l ON l.id=e.lesson_id
+                JOIN public.students st ON st.id=e.student_id JOIN public.stud_groups g ON g.id=st.in_group
+                WHERE l.teacher=? AND l.date>=? AND l.date<=? AND e.grade IN ('2','н','Н')
+                GROUP BY st.id,g.name ORDER BY twos DESC,absences DESC,st.fio
+                SQL,[$teacher,$today->modify('-30 days')->format('Y-m-d'),$today->format('Y-m-d')]);
         } elseif ($tab === 'schedule') {
             $weekDate = $_GET['week'] ?? '';
             $date = is_string($weekDate) && preg_match('/\A[1-9][0-9]{3}-[0-9]{2}-[0-9]{2}\z/', $weekDate)
@@ -247,7 +258,7 @@ if ($teacher) {
                     ->modify('+1 month')->format('Y-m-d');
                 $scope = [$teacher, $group, $subject, $rangeStart, $rangeEnd];
                 $columns = teacherRows($db, <<<'SQL'
-                    SELECT l.id, l.date, l.num_in_table, l.lesson_type, t.name AS topic_name
+                    SELECT l.id, l.date, l.num_in_table, l.lesson_type, l.topic AS topic_id, t.name AS topic_name
                     FROM public.lessons l JOIN public.lesson_topics t ON t.id = l.topic
                     WHERE l.teacher = ? AND l.in_group = ? AND l.subject = ? AND l.date >= ? AND l.date < ?
                     ORDER BY l.date, l.num_in_table, l.id
@@ -272,7 +283,7 @@ if ($teacher) {
                     $columns[] = ['kind' => 'month', 'period' => $monthStart($number), 'name' => $name];
                 }
                 $semesterStart = $monthStart(array_key_first($months));
-                foreach (array_slice(TEACHER_ATTESTATION_TYPES, 1) as $kind => $name) {
+                foreach (array_intersect_key(TEACHER_ATTESTATION_TYPES, ['semester' => true]) as $kind => $name) {
                     $columns[] = ['kind' => $kind, 'period' => $semesterStart, 'name' => $name];
                 }
 
@@ -303,6 +314,7 @@ if ($teacher) {
     }
 }
 
+$topicOptions = isset($subject) && $subject ? teacherRows($db, 'SELECT id,name,lesson_type FROM public.lesson_topics WHERE subj_id = ? ORDER BY name,id', [$subject]) : [];
 $name = $profile['fio'] ?? ($currentUser['name'] ?? 'Преподаватель');
 preg_match('/\A./u', $name, $initial);
 ?>
@@ -314,10 +326,10 @@ preg_match('/\A./u', $name, $initial);
   <meta name="theme-color" content="#111111">
   <meta name="csrf-token" content="<?= h($csrf) ?>">
   <title><?= h($tabs[$tab][0]) ?> — Кабинет преподавателя</title>
-  <link rel="stylesheet" href="./index.css">
-  <link rel="stylesheet" href="./teacher.css">
-  <script src="./teacher.js" defer></script>
-</head>
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('teacher.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <script src="<?= htmlspecialchars(cabinetAsset('grade-picker.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script><script src="<?= htmlspecialchars(cabinetAsset('teacher.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
 <body class="teacher">
   <div class="app-shell">
     <aside class="sidebar">
@@ -334,7 +346,7 @@ preg_match('/\A./u', $name, $initial);
             <span><?= h($title) ?></span>
           </a>
         <?php endforeach; ?>
-      </nav>
+      <a href="teacher.php?tab=finals" title="Итоговые оценки"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Итоговые оценки</span></a></nav>
       <button class="logout" id="teacher-logout" type="button" aria-label="Выйти" title="Выйти">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
         <span>Выйти</span>
@@ -352,35 +364,22 @@ preg_match('/\A./u', $name, $initial);
         <?php if (!$profile || $loadError !== ''): ?>
           <p class="panel teacher-empty"><?= h($loadError ?: 'К вашей учётной записи не привязан профиль преподавателя.') ?></p>
         <?php elseif ($tab === 'home'): ?>
-          <section class="student-welcome-banner teacher-welcome">
-            <div class="eyebrow">РАБОЧИЙ ДЕНЬ · <?= h($today->format('d.m.Y')) ?></div>
-            <h2><?= h($name) ?></h2>
-            <p>Расписание, журнал и аттестация ваших групп.</p>
-            <a class="teacher-link" href="<?= h(teacherUrl('schedule')) ?>">Открыть расписание <span aria-hidden="true">→</span></a>
-          </section>
           <div class="metrics">
-            <?php foreach (['today' => ['Занятий сегодня', 'По расписанию'], 'groups' => ['Групп', 'В этом учебном году'], 'subjects' => ['Дисциплин', 'В этом учебном году']] as $key => [$label, $description]): ?>
-              <div class="metric"><span><?= h($label) ?></span><b><?= h($metrics[$key]) ?></b><small><?= h($description) ?></small></div>
-            <?php endforeach; ?>
+            <div class="metric"><span>Занятий сегодня</span><b><?= count($todayLessons) ?></b><small><?= h($today->format('d.m.Y')) ?></small></div>
+            <div class="metric"><span>Пар с незаполненными отметками</span><b><?= count($unfinished) ?></b><small>За последние 30 дней</small></div>
+            <div class="metric"><span>Студентов с двойками или пропусками</span><b><?= count($attention) ?></b><small>За последние 30 дней</small></div>
           </div>
-          <div class="split-grid">
-            <section class="panel">
-              <header class="panel-head"><div><span>01</span><h3>Ближайшие занятия</h3></div></header>
-              <?php if ($upcoming): ?>
-                <?php teacherSchedule($upcoming); ?>
-              <?php else: ?>
-                <p class="teacher-empty">Предстоящих занятий пока нет.</p>
-              <?php endif; ?>
-            </section>
-            <section class="panel">
-              <header class="panel-head"><div><span>02</span><h3>Журнал за текущий месяц</h3></div></header>
-              <dl class="teacher-summary">
-                <div><dt>Выставлено оценок</dt><dd><?= h($monthSummary['grades']) ?></dd></div>
-                <div><dt>Отмечено пропусков</dt><dd><?= h($monthSummary['absences']) ?></dd></div>
-              </dl>
-              <a class="teacher-link teacher-panel-link" href="<?= h(teacherUrl('journal', ['month' => (int) $today->format('n')])) ?>">Открыть журнал <span aria-hidden="true">→</span></a>
-            </section>
-          </div>
+          <section class="panel"><header class="panel-head"><h3>Сегодня по расписанию</h3></header>
+            <?php if ($todayLessons) teacherSchedule($todayLessons,false); else echo '<p class="teacher-empty">Сегодня занятий нет.</p>'; ?>
+          </section>
+          <section class="panel"><header class="panel-head"><h3>Требуют заполнения</h3></header>
+            <div class="cab-scroll"><table class="cab-table"><thead><tr><th>Занятие</th><th>Группа</th><th>Нет отметок у студентов</th><th></th></tr></thead><tbody>
+              <?php foreach($unfinished as $row): ?><tr><td><?= h($row['subject_name'].' · '.$row['date'].' · '.$row['num_in_table'].' пара') ?></td><td><?= h($row['group_name']) ?></td><td><?= h($row['missing']) ?></td><td><a class="cab-button" href="<?= h(teacherUrl('journal',['group'=>$row['in_group'],'subject'=>$row['subject'],'year'=>(int)substr($row['date'],0,4)-((int)substr($row['date'],5,2)<9?1:0),'month'=>(int)substr($row['date'],5,2)])) ?>">Открыть журнал</a></td></tr><?php endforeach; ?>
+            </tbody></table></div><?php if(!$unfinished): ?><p class="teacher-empty">Отметки за последние 30 дней заполнены.</p><?php endif; ?>
+          </section>
+          <section class="panel"><header class="panel-head"><h3>Двойки и пропуски за 30 дней</h3></header><div class="cab-scroll"><table class="cab-table"><thead><tr><th>Студент</th><th>Группа</th><th>Двойки</th><th>Пропуски</th><th></th></tr></thead><tbody>
+            <?php foreach($attention as $row): ?><tr><td><?= h($row['fio']) ?></td><td><?= h($row['group_name']) ?></td><td><?= h($row['twos']) ?></td><td><?= h($row['absences']) ?></td><td><a class="cab-button" href="<?= h(teacherUrl('journal',['group'=>$row['in_group'],'student'=>$row['id']])) ?>">Посмотреть</a></td></tr><?php endforeach; ?>
+          </tbody></table></div><?php if(!$attention): ?><p class="teacher-empty">Двоек и пропусков за этот период нет.</p><?php endif; ?></section>
         <?php elseif ($tab === 'schedule'): ?>
           <section class="panel">
             <header class="panel-head teacher-week-head">
@@ -412,8 +411,8 @@ preg_match('/\A./u', $name, $initial);
             <?php teacherSelect('student', 'Студент', [0 => 'Все студенты'] + $students, $student); ?>
             <?php teacherSelect('semester', 'Семестр', $tab === 'journal' ? [0 => 'Все семестры'] + $semesterNames : $semesterNames, $semester); ?>
             <?php teacherSelect('month', 'Месяц', [0 => 'Все месяцы'] + $months, $month); ?>
-            <button class="primary" type="submit">Показать</button>
-          </form>
+            <button class="primary" type="submit" hidden>Показать</button>
+          <?= cabinetResetLink(); ?></form>
           <section class="panel table-panel">
             <header class="panel-head teacher-table-head">
               <div><h3><?= h($subjects[$subject] ?? $tabs[$tab][0]) ?></h3></div>
@@ -429,11 +428,11 @@ preg_match('/\A./u', $name, $initial);
                     <tr>
                       <th scope="col">Студент</th>
                       <?php foreach ($columns as $column): ?>
-                        <th scope="col">
+                        <th scope="col" data-lesson-kind="<?= h($column['lesson_type'] ?? '') ?>">
                           <?php if ($tab === 'journal'): ?>
                             <button class="teacher-date date-cell-header" type="button"
                               data-action="lesson" data-lesson="<?= h($column['id']) ?>"
-                              data-topic="<?= h($column['topic_name']) ?>" data-type="<?= h($column['lesson_type'] ?? '') ?>"
+                              data-topic="<?= h($column['topic_name']) ?>" data-topic-id="<?= h($column['topic_id']) ?>" data-type="<?= h($column['lesson_type'] ?? '') ?>"
                               data-caption="<?= h((new DateTimeImmutable($column['date']))->format('d.m.Y') . ' · ' . $column['num_in_table'] . ' пара') ?>"
                               title="<?= h($column['topic_name'] . ($column['lesson_type'] ? ' · ' . $column['lesson_type'] : '')) ?>">
                               <?= h(shortDate($column['date'])) ?><small><?= h($column['num_in_table']) ?> пара</small>
@@ -454,7 +453,7 @@ preg_match('/\A./u', $name, $initial);
                         <?php foreach ($columns as $column): ?>
                           <?php if ($tab === 'journal'): ?>
                             <?php $grades = $entries[$id][$column['id']] ?? []; ?>
-                            <td class="teacher-cell" data-lesson="<?= h($column['id']) ?>" data-count="<?= count($grades) ?>">
+                            <td class="teacher-cell" data-lesson-kind="<?= h($column['lesson_type'] ?? '') ?>" data-lesson="<?= h($column['id']) ?>" data-count="<?= count($grades) ?>">
                               <div class="teacher-grade-list">
                                 <?php foreach ($grades as $entry): ?>
                                   <?php if (in_array($entry['grade'], ['2', '3', '4', '5'], true)) $numericGrades[] = (int) $entry['grade']; ?>
@@ -504,7 +503,7 @@ preg_match('/\A./u', $name, $initial);
         </div>
         <div id="teacher-fields" hidden>
           <div id="teacher-lesson-fields" hidden>
-            <label>Тема занятия <input type="text" name="topic" maxlength="100" autocomplete="off"></label>
+            <label>Тема занятия <select name="topic"><option value="">Выберите тему</option><?php foreach ($topicOptions as $option): ?><option value="<?= h($option['id']) ?>" data-type="<?= h($option['lesson_type'] ?? '') ?>"><?= h($option['name']) ?></option><?php endforeach; ?></select></label>
             <label>Вид занятия
               <select name="type">
                 <option value="">Выберите вид</option>

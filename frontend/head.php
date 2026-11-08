@@ -1,4 +1,11 @@
 <?php
+
+$workspaceRole = 'head';
+if (in_array($_GET['tab'] ?? '', ['groups'], true)) {
+    require __DIR__ . '/workspace.php';
+    exit;
+}
+
 require_once __DIR__ . '/../api/current-user.php';
 require_once __DIR__ . '/../api/head.php';
 
@@ -154,11 +161,11 @@ function headPagination(string $tab, array $filters, string $key, int $page, int
       <?php foreach ([$page - 1 => '← Назад', $page + 1 => 'Далее →'] as $number => $label): ?>
         <?php if ($number >= 1 && $number <= $pages): ?><a href="<?= hh(headUrl($tab, $filters, [$key => $number] + $extra)) ?>"><?= hh($label) ?></a><?php endif; ?>
       <?php endforeach; ?>
-    </nav>
+    <a href="head.php?tab=groups" title="Группы"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Группы</span></a></nav>
     <?php
 }
 
-$kindNames = ['month' => 'За месяц', 'semester' => 'За семестр', 'exam' => 'Экзамен', 'diff' => 'Дифзачёт'];
+$kindNames = ['month' => 'За месяц', 'semester' => 'За семестр', 'exam' => 'Экзамен', 'diff' => 'Дифзачёт', 'credit' => 'Зачёт'];
 ?>
 <!doctype html>
 <html lang="ru">
@@ -167,10 +174,10 @@ $kindNames = ['month' => 'За месяц', 'semester' => 'За семестр',
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <meta name="theme-color" content="#111111">
   <title><?= hh($tabs[$tab][0]) ?> — Заведующий отделением</title>
-  <link rel="stylesheet" href="./index.css">
-  <link rel="stylesheet" href="./head.css">
-  <script src="./head.js" defer></script>
-</head>
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('head.css'), ENT_QUOTES, 'UTF-8') ?>">
+  <script src="<?= htmlspecialchars(cabinetAsset('head.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script>
+<link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
 <body class="head">
 <div class="app-shell">
   <aside class="sidebar">
@@ -203,8 +210,8 @@ $kindNames = ['month' => 'За месяц', 'semester' => 'За семестр',
           <?php else: ?>
             <?php foreach (['year', 'semester', 'subject'] as $key): ?><input type="hidden" name="<?= $key ?>" value="<?= hh($filters[$key]) ?>"><?php endforeach; ?>
           <?php endif; ?>
-          <button class="primary" type="submit">Показать</button>
-        </form>
+          <button class="primary" type="submit" hidden>Показать</button>
+        <?= cabinetResetLink(); ?></form>
         <?php if ($tab === 'students'): ?>
           <section class="panel">
             <header class="panel-head"><div><h3><?= hh($groups[$filters['group']] ?? 'Студенты') ?></h3></div><span class="count"><?= count($shownStudents) ?> студентов</span></header>

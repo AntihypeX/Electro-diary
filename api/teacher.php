@@ -1,12 +1,14 @@
 <?php
 
 const TEACHER_GRADE_VALUES = ['2', '3', '4', '5', 'н'];
+const TEACHER_RESULT_VALUES = ['2', '3', '4', '5', 'н/а'];
 const TEACHER_LESSON_TYPES = ['Лекция', 'Практическая', 'Экзамен'];
 const TEACHER_ATTESTATION_TYPES = [
     'month' => 'За месяц',
     'semester' => 'За семестр',
     'exam' => 'Экзамен',
     'diff' => 'Дифзачёт',
+    'credit' => 'Зачёт',
 ];
 
 final class TeacherRequestError extends RuntimeException
@@ -140,26 +142,18 @@ function teacherSave(PDO $db, int $teacher, array $input): string
 
 function teacherSaveLesson(PDO $db, int $lessonId, array $lesson, array $input): string
 {
-    $name = is_string($input['topic'] ?? null) ? trim($input['topic']) : '';
-    $type = $input['type'] ?? null;
-    if ($name === '' || preg_match('/\A[^\x00\r\n]{1,100}\z/u', $name) !== 1 || !in_array($type, TEACHER_LESSON_TYPES, true)) {
-        throw new TeacherRequestError('Укажите тему длиной до 100 символов и выберите вид занятия.', 400);
+    $topicId = teacherId($input['topic'] ?? null);
+    $topic = teacherQuery($db, 'SELECT id, lesson_type FROM public.lesson_topics WHERE id = ? AND subj_id = ?', [$topicId, $lesson['subject']])->fetch(PDO::FETCH_ASSOC);
+    if (!$topic) {
+        throw new TeacherRequestError('Выберите тему из списка тем этого предмета.', 400);
+    }
+    $type = $topic['lesson_type'] ?? ($input['type'] ?? null);
+    if (!in_array($type, TEACHER_LESSON_TYPES, true)) {
+        throw new TeacherRequestError('Для темы без заданного вида выберите вид занятия.', 400);
     }
     if ($lesson['topic_name'] !== ($input['previousTopic'] ?? null)
         || ($lesson['lesson_type'] ?? '') !== ($input['previousType'] ?? null)) {
         throw new TeacherRequestError('Занятие уже изменилось. Обновите страницу и проверьте данные.', 409);
-    }
-
-    $topicId = $lesson['topic'];
-    if ($name !== $lesson['topic_name']) {
-        $topicId = teacherQuery($db, <<<'SQL'
-            SELECT id FROM public.lesson_topics WHERE name = ? AND subj_id = ? ORDER BY id LIMIT 1
-            SQL, [$name, $lesson['subject']])->fetchColumn();
-        if (!$topicId) {
-            $topicId = teacherQuery($db, <<<'SQL'
-                INSERT INTO public.lesson_topics (name, subj_id) VALUES (?, ?) RETURNING id
-                SQL, [$name, $lesson['subject']])->fetchColumn();
-        }
     }
     teacherQuery($db, 'UPDATE public.lessons SET topic = ?, lesson_type = ? WHERE id = ?', [$topicId, $type, $lessonId]);
     return 'Тема и вид занятия сохранены.';
@@ -172,8 +166,8 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
     $previous = $input['previous'] ?? null;
     $period = $input['period'] ?? null;
     if (!is_string($kind) || !isset(TEACHER_ATTESTATION_TYPES[$kind])
-        || !in_array($grade, TEACHER_GRADE_VALUES, true)
-        || ($previous !== null && !in_array($previous, TEACHER_GRADE_VALUES, true))
+        || !in_array($grade, $kind === 'credit' ? ['зачтено', 'не зачтено', 'н/а'] : TEACHER_RESULT_VALUES, true)
+        || ($previous !== null && !in_array($previous, $kind === 'credit' ? ['зачтено', 'не зачтено', 'н/а'] : TEACHER_RESULT_VALUES, true))
         || !is_string($period) || !preg_match('/\A([1-9][0-9]{3})-(0[1-9]|1[0-2])-01\z/', $period, $parts)) {
         throw new TeacherRequestError('Некорректные данные аттестации.', 400);
     }

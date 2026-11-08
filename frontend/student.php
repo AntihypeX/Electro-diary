@@ -1,5 +1,12 @@
 <?php
-require_once __DIR__ . '/../api/auth.php';
+
+$workspaceRole = 'student';
+if (in_array($_GET['tab'] ?? '', ['schedule', 'monthly', 'finals', 'group'], true)) {
+    require __DIR__ . '/workspace.php';
+    exit;
+}
+
+require_once __DIR__ . '/../api/current-user.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -111,14 +118,14 @@ if (!isset($academicMonths[$currentMonth])) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Контур — Кабинет студента</title>
-    <link rel="stylesheet" href="./index.css" />
-  </head>
+    <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>" />
+  <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
   <body>
     <div class="app-shell">
       <aside class="sidebar">
         <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>
         <div class="user-card">
-          <span class="avatar"><?= htmlspecialchars(mb_strtoupper(mb_substr($studentName, 0, 1))) ?></span>
+          <span class="avatar"><?= htmlspecialchars(preg_match('/^./u', $studentName, $avatarLetter) ? $avatarLetter[0] : 'С') ?></span>
           <div>
             <b><?= htmlspecialchars($studentName) ?></b>
             <small>Студент<?= $groupName !== null ? ' (' . htmlspecialchars($groupName) . ')' : '' ?></small>
@@ -129,7 +136,7 @@ if (!isset($academicMonths[$currentMonth])) {
             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
             <span>Моя успеваемость</span>
           </button>
-        </nav>
+        <a href="student.php?tab=schedule" title="Расписание"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Расписание</span></a><a href="student.php?tab=monthly" title="Аттестация за месяцы"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Аттестация за месяцы</span></a><a href="student.php?tab=finals" title="Итоговые оценки"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Итоговые оценки</span></a><a href="student.php?tab=group" title="Моя группа"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Моя группа</span></a></nav>
         <button class="logout" onclick="doLogout()">
           <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
           <span>Выйти</span>
@@ -150,7 +157,7 @@ if (!isset($academicMonths[$currentMonth])) {
 
         <div class="page-stack">
           <!-- Панель фильтров: Семестр, Месяц, Дисциплина -->
-          <div class="filter-toolbar">
+          <div class="filter-toolbar"><button type="button" class="cab-button filter-reset">Сбросить фильтры</button>
             <div class="filter-group">
               <span>Семестр</span>
               <select id="semesterFilter" onchange="onSemesterChange()">

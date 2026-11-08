@@ -74,8 +74,9 @@ function showFields(moveFocus = true) {
 
   let firstField;
   if (lesson) {
-    form.elements.topic.value = editor.previousTopic;
+    form.elements.topic.value = editor.topicId;
     form.elements.type.value = editor.previousType;
+    syncTopicType();
     firstField = form.elements.topic;
   } else {
     addRowButton.hidden = !adding;
@@ -102,6 +103,7 @@ matrix?.addEventListener('click', (event) => {
     Object.assign(editor, {
       lesson: button.dataset.lesson,
       previousTopic: button.dataset.topic,
+      topicId: button.dataset.topicId,
       previousType: button.dataset.type,
     });
   } else if (action === 'attestation') {
@@ -145,7 +147,7 @@ matrix?.addEventListener('click', (event) => {
   } else {
     showFields(false);
     dialog.showModal();
-    fields.querySelector(action === 'lesson' ? 'input' : '[name="grades"]').focus();
+    fields.querySelector(action === 'lesson' ? '[name="topic"]' : '[name="grades"]').focus();
   }
 });
 
@@ -211,3 +213,11 @@ document.querySelector('#teacher-logout').addEventListener('click', async (event
     button.disabled = false;
   }
 });
+
+function syncTopicType() {
+  const selected = form.elements.topic.selectedOptions[0];
+  const type = selected?.dataset.type;
+  if (type) form.elements.type.value = type;
+  form.elements.type.disabled = Boolean(type);
+}
+form.elements.topic.addEventListener('change', syncTopicType);

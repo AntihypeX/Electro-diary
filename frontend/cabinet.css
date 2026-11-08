@@ -1,0 +1,448 @@
+body,
+body *,
+body *::before,
+body *::after {
+  box-sizing: border-box;
+}
+.cabinet .page-stack {
+  animation: none;
+}
+.sidebar nav a {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  color: #aaa;
+  font-size: 12px;
+  text-decoration: none;
+}
+.sidebar nav a[aria-current],
+.sidebar nav a:hover {
+  background: #252525;
+  color: white;
+}
+.sidebar svg {
+  flex-shrink: 0;
+}
+.cab-logout {
+  margin-top: auto;
+}
+.cab-logout .logout {
+  margin: 0;
+}
+.avatar {
+  border: 0;
+  padding: 0;
+  overflow: hidden;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.avatar img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.cab-empty {
+  padding: 20px;
+  font-size: 13px;
+  color: #666;
+}
+.cab-actions,
+.cab-day-nav {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+.cab-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 10px 13px;
+  border: 1px solid #ccc;
+  background: #fafaf8;
+  color: #222;
+  text-decoration: none;
+  font-size: 12px;
+  cursor: pointer;
+}
+.cab-pair {
+  display: flex;
+  gap: 20px;
+  padding: 20px;
+  border-bottom: 1px solid #ddd;
+}
+.cab-pair h3 {
+  margin: 0;
+  font-size: 15px;
+}
+.cab-pair p,
+.cab-pair small {
+  font-size: 12px;
+  color: #666;
+}
+.cab-pair > strong {
+  min-width: 55px;
+}
+.cab-day-nav details {
+  position: relative;
+}
+.cab-day-nav details form {
+  position: absolute;
+  right: 0;
+  top: 100%;
+  z-index: 30;
+  background: white;
+  padding: 16px;
+  box-shadow: 0 5px 20px #0003;
+  display: grid;
+  gap: 12px;
+  width: 245px;
+}
+.cab-avatar-dialog {
+  max-width: calc(100% - 28px);
+  width: 430px;
+  border: 1px solid #222;
+  padding: 22px;
+  background: #f9f9f7;
+}
+.cab-avatar-dialog::backdrop {
+  background: #0008;
+}
+.cab-avatar-dialog form {
+  display: grid;
+  gap: 18px;
+}
+.cab-avatar-dialog h2 {
+  font-size: 19px;
+  margin: 0;
+}
+.cab-filters {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  padding: 16px;
+  border: 1px solid #ddd;
+}
+.cab-filters label {
+  width: auto;
+  flex: 1;
+  min-width: 120px;
+}
+.cab-scroll {
+  max-width: 100%;
+  overflow: auto;
+}
+.cab-table {
+  border-collapse: collapse;
+  width: 100%;
+  font-size: 13px;
+  background: white;
+}
+.cab-table td,
+.cab-table th {
+  padding: 12px;
+  text-align: left;
+  border: 1px solid #ddd;
+}
+.cab-table thead {
+  background: #eaeae6;
+}
+.cab-table .grade {
+  display: inline-grid;
+  margin-right: 5px;
+  vertical-align: middle;
+}
+#gradesTable td[data-month] {
+  white-space: nowrap;
+}
+#gradesTable td[data-month] .grade {
+  display: inline-grid;
+  margin: 0 3px !important;
+  vertical-align: middle;
+}
+.cabinet .panel-head {
+  height: auto;
+  min-height: 70px;
+  gap: 12px;
+  flex-wrap: wrap;
+  padding-block: 12px;
+}
+.cab-note {
+  padding: 12px;
+  font-size: 12px;
+  color: #555;
+}
+@media (max-width: 900px) {
+  .sidebar nav a > span {
+    display: none;
+  }
+  .sidebar nav a {
+    justify-content: center;
+  }
+}
+@media (max-width: 600px) {
+  .app-shell {
+    grid-template-columns: 52px minmax(0, 1fr) !important;
+  }
+  .sidebar {
+    width: 52px !important;
+    padding: 16px 6px !important;
+  }
+  .sidebar > .brand,
+  .sidebar .user-card,
+  .sidebar .logout {
+    padding-inline: 0 !important;
+    justify-content: center;
+  }
+  .content {
+    padding-inline: 10px !important;
+  }
+  .topbar h1 {
+    font-size: 19px !important;
+  }
+  .breadcrumb {
+    font-size: 8px;
+  }
+  .panel-head {
+    height: auto !important;
+    min-height: 64px;
+    flex-wrap: wrap;
+    gap: 8px;
+    padding: 12px !important;
+  }
+  .filter-toolbar,
+  .cab-filters {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    padding: 12px !important;
+  }
+  .filter-toolbar label,
+  .filter-group,
+  .cab-filters label {
+    min-width: 0 !important;
+    width: 100% !important;
+  }
+  select,
+  input {
+    max-width: 100%;
+  }
+  .cab-filters select {
+    width: 100%;
+  }
+  .matrix-table th:first-child,
+  .matrix-table td:first-child {
+    min-width: 110px;
+    max-width: 140px;
+    white-space: normal;
+    overflow-wrap: anywhere;
+  }
+  .matrix-table th:last-child,
+  .matrix-table td:last-child {
+    position: static !important;
+    min-width: 85px;
+  }
+  .cab-pair {
+    padding: 14px;
+    gap: 12px;
+  }
+}
+body .page-stack {
+  animation: none;
+}
+@media (max-width: 600px) {
+  table[data-mobile-cards],
+  table[data-mobile-cards] tbody {
+    display: block;
+    width: 100%;
+  }
+  table[data-mobile-cards] thead {
+    display: none;
+  }
+  table[data-mobile-cards] tr {
+    display: block;
+    border-bottom: 2px solid #ccc;
+    padding: 10px;
+  }
+  table[data-mobile-cards] td,
+  table[data-mobile-cards] tbody th {
+    display: grid;
+    grid-template-columns: minmax(75px, 0.8fr) minmax(0, 1.2fr);
+    gap: 10px;
+    align-items: center;
+    min-width: 0;
+    max-width: none;
+    padding: 8px 4px;
+    border: 0;
+    text-align: left;
+    overflow-wrap: anywhere;
+  }
+  table[data-mobile-cards] td::before,
+  table[data-mobile-cards] tbody th::before {
+    content: attr(data-label);
+    color: #777;
+    font-size: 10px;
+    font-weight: 400;
+  }
+  table[data-mobile-cards] td[colspan] {
+    display: block;
+  }
+  table[data-mobile-cards] td[colspan]::before {
+    display: none;
+  }
+  table[data-mobile-cards] .grade {
+    margin-left: 0;
+  }
+  .matrix-table thead th:first-child {
+    letter-spacing: 0;
+    font-size: 8px;
+  }
+}
+/* Общие рабочие формы и таблицы всех кабинетов. */
+.filter-toolbar,
+.cab-filters {
+  background: #f9f9f7;
+  border: 1px solid #d3d3cf;
+  gap: 15px;
+  padding: 15px 20px;
+  align-items: end;
+}
+.filter-reset {
+  min-height: 38px;
+  white-space: normal;
+}
+.cab-table,
+.head-table,
+.sec-table {
+  font-size: 12px;
+}
+.cab-table thead th,
+.head-table thead th,
+.sec-table thead th {
+  background: #ededeb;
+  color: #666;
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+.result-matrix th:not(:first-child) {
+  min-width: 135px;
+  max-width: 220px;
+  white-space: normal;
+}
+.result-matrix th:last-child,
+.result-matrix td:last-child {
+  position: static;
+  box-shadow: none;
+}
+.result-matrix tbody th {
+  font-size: 12px;
+  text-transform: none;
+  letter-spacing: 0;
+}
+.result-marks {
+  display: flex;
+  justify-content: center;
+  gap: 5px;
+  align-items: center;
+}
+.result-marks .grade {
+  width: auto;
+  min-width: 30px;
+  padding: 5px 9px;
+  white-space: nowrap;
+}
+.quick-grade-picker {
+  position: fixed;
+  z-index: 80;
+  background: #fafaf8;
+  color: #151515;
+  border: 1px solid #aaa;
+  box-shadow: 0 6px 24px #0003;
+  padding: 12px;
+  width: 260px;
+  max-width: calc(100vw - 16px);
+}
+.quick-grade-picker p {
+  margin: 0 0 8px;
+  font-size: 12px;
+}
+.quick-grade-picker [role="alert"] {
+  color: #333;
+  margin-top: 8px;
+}
+.quick-grade-options {
+  display: flex;
+  gap: 6px;
+}
+.quick-grade-options button {
+  height: 38px;
+  min-width: 38px;
+  border: 1px solid #222;
+  background: #222;
+  color: white;
+  font-weight: 700;
+  font-size: 14px;
+}
+.quick-grade-options button:disabled {
+  opacity: 0.3;
+}
+.quick-grade-options button:hover:not(:disabled) {
+  background: #555;
+}
+.teacher .teacher-matrix [data-lesson-kind="Практическая"] {
+  background: #dcdcd7 !important;
+}
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] {
+  background: #171717 !important;
+  color: #fff;
+}
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .grade {
+  background: white;
+  color: #111;
+  border-color: white;
+}
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .teacher-add,
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .teacher-date {
+  color: white;
+  border-color: #888;
+  background: transparent;
+}
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] small {
+  color: #ddd;
+}
+@media (max-width: 600px) {
+  .result-matrix th:first-child {
+    min-width: 120px;
+  }
+  .quick-grade-options button {
+    min-width: 38px;
+  }
+  .filter-reset {
+    padding: 9px;
+    font-size: 11px;
+  }
+}
+@media (max-width: 600px) {
+  .mobile-cell-value {
+    min-width: 0;
+    overflow-wrap: anywhere;
+  }
+  table[data-mobile-cards] tbody th {
+    background: transparent;
+  }
+  table[data-mobile-cards] .mobile-cell-value small {
+    display: block;
+  }
+}
+.result-matrix tbody th{color:#151515;background:#f8f8f6}
+.result-matrix tbody td{background:white}
+/* Текстовые результаты имеют прямоугольник по ширине надписи. */
+.result-marks .grade,
+.grade[data-text-result]{display:inline-flex;align-items:center;justify-content:center;width:max-content;min-width:30px;max-width:none;height:auto;min-height:30px;padding:6px 10px;white-space:nowrap;line-height:1.4}
+.quick-grade-options{flex-wrap:wrap}
+.quick-grade-options button{flex:1 0 36px;width:auto;padding:7px;white-space:nowrap}
+.quick-grade-picker{background:#fafaf8;border:1px solid #aaa;padding:12px;box-shadow:0 6px 24px #0003}
+.quick-grade-picker>.cab-button,.quick-grade-picker>.primary{margin-top:8px;width:100%}
+.quick-grade-queued{display:flex;flex-wrap:wrap;gap:5px;margin-top:8px}
+.teacher .teacher-matrix [data-lesson-kind="Практическая"]{background:#ededeb!important}
