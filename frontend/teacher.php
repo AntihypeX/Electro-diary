@@ -1,13 +1,13 @@
 <?php
 
 $workspaceRole = 'teacher';
-if (in_array($_GET['tab'] ?? '', ['schedule', 'finals'], true)) {
+if (in_array($_GET['tab'] ?? '', ['schedule', 'finals', 'group'], true)) {
     require __DIR__ . '/workspace.php';
     exit;
 }
 
 
-require_once __DIR__ . '/../api/current-user.php';
+require_once __DIR__ . '/../api/cabinet.php';
 require_once __DIR__ . '/../api/teacher.php';
 
 header('Cache-Control: no-store');
@@ -87,16 +87,22 @@ function teacherUrl(string $tab, array $filters = []): string
     return 'teacher.php?' . http_build_query(['tab' => $tab] + $filters);
 }
 
-function teacherSelect(string $key, string $label, array $options, int|string $selected): void
+function teacherSelect(string $key, string $label, array $options, int|string $selected, bool $wrap = false): void
 {
+    $selectedText = $options[$selected] ?? reset($options);
     ?>
-    <label class="filter-group">
+    <label class="filter-group<?= $wrap ? ' teacher-filter-long' : '' ?>">
       <span><?= h($label) ?></span>
-      <select name="<?= h($key) ?>">
+      <?php if ($wrap): ?>
+        <span class="teacher-select-wrap">
+          <span class="teacher-select-value" aria-hidden="true"><?= h($selectedText) ?></span>
+      <?php endif; ?>
+      <select name="<?= h($key) ?>"<?= $wrap ? ' title="' . h($selectedText) . '"' : '' ?>>
         <?php foreach ($options as $value => $text): ?>
           <option value="<?= h($value) ?>" <?= (string) $value === (string) $selected ? 'selected' : '' ?>><?= h($text) ?></option>
         <?php endforeach; ?>
       </select>
+      <?php if ($wrap): ?></span><?php endif; ?>
     </label>
     <?php
 }
@@ -124,12 +130,7 @@ function teacherSchedule(array $lessons, bool $withDate = true): void
     <?php
 }
 
-$tabs = [
-    'home' => ['Главная', '<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>'],
-    'schedule' => ['Расписание', '<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>'],
-    'journal' => ['Журнал оценок', '<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/>'],
-    'attestation' => ['Аттестация', '<path d="M9 5H5v16h14V5h-4M9 3h6v4H9zM9 14l2 2 4-4"/>'],
-];
+$tabs = cabinetTeacherTabs();
 $tab = is_string($_GET['tab'] ?? null) && isset($tabs[$_GET['tab']]) ? $_GET['tab'] : 'home';
 $today = new DateTimeImmutable('today', new DateTimeZone('Asia/Novosibirsk'));
 $currentYear = (int) $today->format('Y') - ((int) $today->format('n') < 9 ? 1 : 0);
@@ -144,7 +145,7 @@ $lessonListSql = <<<'SQL'
     FROM public.lessons l
     JOIN public.subjects s ON s.id = l.subject
     JOIN public.stud_groups g ON g.id = l.in_group
-    JOIN public.lesson_topics t ON t.id = l.topic
+    LEFT JOIN public.lesson_topics t ON t.id = l.topic
     WHERE l.teacher = ?
     SQL;
 
@@ -171,7 +172,7 @@ if ($teacher) {
                 FROM public.evaluations e JOIN public.lessons l ON l.id=e.lesson_id
                 JOIN public.students st ON st.id=e.student_id JOIN public.stud_groups g ON g.id=st.in_group
                 WHERE l.teacher=? AND l.date>=? AND l.date<=? AND e.grade IN ('2','н','Н')
-                GROUP BY st.id,g.name ORDER BY twos DESC,absences DESC,st.fio
+                GROUP BY st.id,g.name ORDER BY public.diary_name_sort(st.fio) COLLATE "C",st.fio,st.id
                 SQL,[$teacher,$today->modify('-30 days')->format('Y-m-d'),$today->format('Y-m-d')]);
         } elseif ($tab === 'schedule') {
             $weekDate = $_GET['week'] ?? '';
@@ -226,7 +227,7 @@ if ($teacher) {
             }
 
             $students = $group ? array_column(teacherRows($db, <<<'SQL'
-                SELECT id, fio FROM public.students WHERE in_group = ? ORDER BY fio, id
+                SELECT id, fio FROM public.students WHERE in_group = ? ORDER BY public.diary_name_sort(fio) COLLATE "C", fio, id
                 SQL, [$group]), 'fio', 'id') : [];
             $student = (int) ($_GET['student'] ?? 0);
             if (!isset($students[$student])) {
@@ -259,12 +260,12 @@ if ($teacher) {
                 $scope = [$teacher, $group, $subject, $rangeStart, $rangeEnd];
                 $columns = teacherRows($db, <<<'SQL'
                     SELECT l.id, l.date, l.num_in_table, l.lesson_type, l.topic AS topic_id, t.name AS topic_name
-                    FROM public.lessons l JOIN public.lesson_topics t ON t.id = l.topic
+                    FROM public.lessons l LEFT JOIN public.lesson_topics t ON t.id = l.topic
                     WHERE l.teacher = ? AND l.in_group = ? AND l.subject = ? AND l.date >= ? AND l.date < ?
                     ORDER BY l.date, l.num_in_table, l.id
                     SQL, $scope);
                 $gradesSql = <<<'SQL'
-                    SELECT e.id, e.student_id, e.lesson_id, e.grade
+                    SELECT e.id, e.student_id, e.lesson_id, e.grade, e.previous_grade
                     FROM public.evaluations e
                     JOIN public.lessons l ON l.id = e.lesson_id
                     JOIN public.students s ON s.id = e.student_id AND s.in_group = l.in_group
@@ -314,7 +315,7 @@ if ($teacher) {
     }
 }
 
-$topicOptions = isset($subject) && $subject ? teacherRows($db, 'SELECT id,name,lesson_type FROM public.lesson_topics WHERE subj_id = ? ORDER BY name,id', [$subject]) : [];
+$topicOptions = isset($subject) && $subject ? teacherRows($db, "SELECT t.id,t.name,to_jsonb(t)->>'lesson_type' AS lesson_type FROM public.lesson_topics t WHERE t.subj_id = ? AND (t.teacher_id IS NULL OR t.teacher_id=?) ORDER BY t.name,t.id", [$subject,$teacher]) : [];
 $name = $profile['fio'] ?? ($currentUser['name'] ?? 'Преподаватель');
 preg_match('/\A./u', $name, $initial);
 ?>
@@ -332,26 +333,7 @@ preg_match('/\A./u', $name, $initial);
 <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
 <body class="teacher">
   <div class="app-shell">
-    <aside class="sidebar">
-      <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>
-      <div class="user-card">
-        <span class="avatar"><?= h($initial[0] ?? 'П') ?></span>
-        <div><b title="<?= h($name) ?>"><?= h($name) ?></b><small>Преподаватель</small></div>
-      </div>
-      <nav aria-label="Кабинет преподавателя">
-        <?php foreach ($tabs as $key => [$title, $icon]): ?>
-          <a href="<?= h(teacherUrl($key, in_array($key, ['journal', 'attestation'], true) ? $filterLinks : [])) ?>"
-             aria-label="<?= h($title) ?>" title="<?= h($title) ?>" <?= $tab === $key ? 'aria-current="page"' : '' ?>>
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><?= $icon ?></svg>
-            <span><?= h($title) ?></span>
-          </a>
-        <?php endforeach; ?>
-      <a href="teacher.php?tab=finals" title="Итоговые оценки"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Итоговые оценки</span></a></nav>
-      <button class="logout" id="teacher-logout" type="button" aria-label="Выйти" title="Выйти">
-        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
-        <span>Выйти</span>
-      </button>
-    </aside>
+    <?php cabSidebar('teacher', $currentUser, $tab, $csrf, $filterLinks); ?>
 
     <main class="content">
       <header class="topbar">
@@ -407,7 +389,7 @@ preg_match('/\A./u', $name, $initial);
             <input type="hidden" name="tab" value="<?= h($tab) ?>">
             <?php teacherSelect('year', 'Учебный год', $years, $year); ?>
             <?php teacherSelect('group', 'Группа', $groups ?: [0 => 'Нет групп'], $group); ?>
-            <?php teacherSelect('subject', 'Дисциплина', $subjects ?: [0 => 'Нет дисциплин'], $subject); ?>
+            <?php teacherSelect('subject', 'Дисциплина', $subjects ?: [0 => 'Нет дисциплин'], $subject, $tab === 'attestation'); ?>
             <?php teacherSelect('student', 'Студент', [0 => 'Все студенты'] + $students, $student); ?>
             <?php teacherSelect('semester', 'Семестр', $tab === 'journal' ? [0 => 'Все семестры'] + $semesterNames : $semesterNames, $semester); ?>
             <?php teacherSelect('month', 'Месяц', [0 => 'Все месяцы'] + $months, $month); ?>
@@ -422,6 +404,15 @@ preg_match('/\A./u', $name, $initial);
               <p class="teacher-empty"><?= !$groups ? 'В этом учебном году у вас нет занятий в расписании.' : (!$students ? 'В выбранной группе пока нет студентов.' : 'За выбранный период занятий нет. Измените семестр или месяц.') ?></p>
             <?php else: ?>
               <p class="teacher-table-note"><?= $tab === 'journal' ? 'Нажмите на дату, чтобы указать тему пары. Нажмите на ячейку или оценку, чтобы выставить или изменить отметку.' : 'Выберите ячейку, чтобы выставить или изменить результат аттестации.' ?></p>
+              <?php if ($tab === 'attestation'): ?>
+                <div class="cab-note">
+                  <button class="cab-button" type="button" data-auto-attestation="<?= h(json_encode([
+                      'action'=>'attestation_auto', 'year'=>$year, 'semester'=>$semester, 'month'=>$month,
+                      'group'=>$group, 'subject'=>$subject, 'student'=>$student,
+                  ])) ?>">Заполнить автоматически</button>
+                  <small>Для среднего берутся числовые оценки, даже если оценка одна. Пропуски «н» не учитываются. Если числовых оценок нет, ячейка остаётся пустой. Семестровая отметка считается после заполнения всех месяцев.</small>
+                </div>
+              <?php endif; ?>
               <div class="matrix-container" id="teacher-matrix" tabindex="0" role="region" aria-label="<?= h($tabs[$tab][0]) ?>">
                 <table class="matrix-table teacher-matrix <?= $tab === 'attestation' ? 'teacher-attestation' : '' ?>">
                   <thead>
@@ -452,15 +443,18 @@ preg_match('/\A./u', $name, $initial);
                         <th scope="row"><?= h($fio) ?></th>
                         <?php foreach ($columns as $column): ?>
                           <?php if ($tab === 'journal'): ?>
-                            <?php $grades = $entries[$id][$column['id']] ?? []; ?>
+                            <?php
+                            $grades = $entries[$id][$column['id']] ?? [];
+                            $exam = $column['lesson_type'] === 'Экзамен';
+                            ?>
                             <td class="teacher-cell" data-lesson-kind="<?= h($column['lesson_type'] ?? '') ?>" data-lesson="<?= h($column['id']) ?>" data-count="<?= count($grades) ?>">
-                              <div class="teacher-grade-list">
+                              <div class="teacher-grade-list marks-list">
                                 <?php foreach ($grades as $entry): ?>
                                   <?php if (in_array($entry['grade'], ['2', '3', '4', '5'], true)) $numericGrades[] = (int) $entry['grade']; ?>
-                                  <button class="grade" type="button" data-action="grade_edit" data-entry="<?= h($entry['id']) ?>"
-                                    data-value="<?= h($entry['grade']) ?>" aria-label="<?= h('Изменить оценку ' . $entry['grade'] . ' · ' . $fio . ' · ' . shortDate($column['date'])) ?>"><?= h($entry['grade']) ?></button>
+                                  <span class="mark-entry"><button <?= cabGradeAttributes('grade', $exam ? $entry['previous_grade'] : null) ?> type="button" data-action="grade_edit" data-entry="<?= h($entry['id']) ?>"
+                                    data-value="<?= h($entry['grade']) ?>" aria-label="<?= h('Изменить оценку ' . $entry['grade'] . ' · ' . $fio . ' · ' . shortDate($column['date'])) ?>"><?= h($entry['grade']) ?></button></span>
                                 <?php endforeach; ?>
-                                <?php if (!array_intersect(array_column($grades, 'grade'), ['н', 'Н'])): ?>
+                                <?php if ((!$exam || !$grades) && !array_intersect(array_column($grades, 'grade'), ['н', 'Н'])): ?>
                                   <button class="teacher-add" type="button" data-action="grade_add"
                                     aria-label="<?= h('Добавить оценку · ' . $fio . ' · ' . shortDate($column['date'])) ?>">+</button>
                                 <?php endif; ?>
@@ -504,6 +498,7 @@ preg_match('/\A./u', $name, $initial);
         <div id="teacher-fields" hidden>
           <div id="teacher-lesson-fields" hidden>
             <label>Тема занятия <select name="topic"><option value="">Выберите тему</option><?php foreach ($topicOptions as $option): ?><option value="<?= h($option['id']) ?>" data-type="<?= h($option['lesson_type'] ?? '') ?>"><?= h($option['name']) ?></option><?php endforeach; ?></select></label>
+            <label>Или новая тема <input name="newTopic" maxlength="100" placeholder="Введите название темы"></label>
             <label>Вид занятия
               <select name="type">
                 <option value="">Выберите вид</option>

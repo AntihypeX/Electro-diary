@@ -1,12 +1,12 @@
 <?php
 
 $workspaceRole = 'secretary';
-if (in_array($_GET['tab'] ?? '', ['groups'], true)) {
+if (in_array($_GET['tab'] ?? '', ['groups', 'schedule', 'statements'], true)) {
     require __DIR__ . '/workspace.php';
     exit;
 }
 
-require_once __DIR__ . '/../api/current-user.php';
+require_once __DIR__ . '/../api/cabinet.php';
 require_once __DIR__ . '/../api/secretary.php';
 
 header('Cache-Control: no-store');
@@ -104,7 +104,7 @@ try {
     }
     if ($groupFilter) { $where[] = 's.in_group = ?'; $parameters[] = $groupFilter; }
     $scope = $where ? ' WHERE ' . implode(' AND ', $where) : '';
-    $studentOptions = secQuery($db, 'SELECT s.id, s.fio FROM public.students s JOIN public.stud_groups g ON g.id = s.in_group' . $scope . ' ORDER BY s.fio, s.id', $parameters)->fetchAll(PDO::FETCH_KEY_PAIR);
+    $studentOptions = secQuery($db, 'SELECT s.id, s.fio FROM public.students s JOIN public.stud_groups g ON g.id = s.in_group' . $scope . ' ORDER BY public.diary_name_sort(s.fio) COLLATE "C", s.fio, s.id', $parameters)->fetchAll(PDO::FETCH_KEY_PAIR);
     $studentFilter = (int) (filter_var($_GET['student'] ?? null, FILTER_VALIDATE_INT) ?: 0);
     if (!isset($studentOptions[$studentFilter])) $studentFilter = 0;
     if ($studentFilter) { $where[] = 's.id = ?'; $parameters[] = $studentFilter; }
@@ -119,7 +119,7 @@ try {
     $pages = max(1, (int) ceil($count / 30));
     $page = min($pages, max(1, (int) (filter_var($_GET['page'] ?? null, FILTER_VALIDATE_INT) ?: 1)));
     $students = secQuery($db, 'SELECT s.id, s.fio, s.birth_date, s.phone, g.name AS group_name,
-        c.name AS campus_name, e.expulsion_date' . $from . $scope . ' ORDER BY s.fio, s.id LIMIT 30 OFFSET ' . (($page - 1) * 30), $parameters)->fetchAll(PDO::FETCH_ASSOC);
+        c.name AS campus_name, e.expulsion_date' . $from . $scope . ' ORDER BY public.diary_name_sort(s.fio) COLLATE "C", s.fio, s.id LIMIT 30 OFFSET ' . (($page - 1) * 30), $parameters)->fetchAll(PDO::FETCH_ASSOC);
 
     $persisted = $selected ? secLoad($db, $selected) : null;
     if ($values === null) {
@@ -159,6 +159,7 @@ function secRenderFields(string $section, string $prefix, array $values, array $
             $value = match ($value) { true, 't', 'true', 1, '1' => '1', false, 'f', 'false', 0, '0' => '0', default => '' };
         }
         if (!is_scalar($value) && $value !== null) $value = '';
+        if ($type === 'tel') $value = secPhone((string) $value);
         $required = $type === 'required' || ($admissionRequired && $section === 'education' && $key === 'admission_date');
         $name = $prefix . '[' . $key . ']';
         echo '<label' . ($type === 'textarea' ? ' class="sec-wide"' : '') . '><span>' . sh($label) . ($required ? ' *' : '') . '</span>';
@@ -172,6 +173,7 @@ function secRenderFields(string $section, string $prefix, array $values, array $
         } else {
             $inputType = match ($type) { 'date' => 'date', 'email' => 'email', 'tel' => 'tel', 'year' => 'number', default => 'text' };
             $extra = $type === 'year' ? ' min="1900" max="9999"' : ' maxlength="' . ($section === 'student' && $key === 'fio' ? 100 : 500) . '"';
+            if ($type === 'tel') $extra .= ' placeholder="+7 (900) 123-45-67"';
             echo '<input type="' . $inputType . '" name="' . sh($name) . '" value="' . sh($value) . '"' . $extra .
                 ($required ? ' required' : '') . '>';
         }
@@ -207,15 +209,7 @@ function secRenderCollection(string $section, array $rows, array $specialties): 
 <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
 <body class="secretary">
 <div class="app-shell">
-  <aside class="sidebar">
-    <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>
-    <div class="user-card"><span class="avatar">С</span><div><b><?= sh($currentUser['name'] ?? $currentUser['login'] ?? 'Секретарь') ?></b><small>Секретарь</small></div></div>
-    <nav aria-label="Кабинет секретаря">
-      <a href="secretary.php" <?= $tab === 'students' ? 'aria-current="page"' : '' ?> title="Студенты"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 6h12M9 12h12M9 18h12M3 6h1M3 12h1M3 18h1"/></svg><span>Студенты</span></a>
-      <a href="secretary.php?tab=enroll" <?= $tab === 'enroll' ? 'aria-current="page"' : '' ?> title="Зачисление"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M12 4v16M4 12h16"/></svg><span>Зачисление</span></a>
-    <a href="secretary.php?tab=groups" title="Группы"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Группы</span></a></nav>
-    <form method="post" class="sec-logout"><input type="hidden" name="csrf" value="<?= sh($csrf) ?>"><input type="hidden" name="action" value="logout"><button class="logout" title="Выйти"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 17l5-5-5-5M15 12H3M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg><span>Выйти</span></button></form>
-  </aside>
+  <?php cabSidebar('secretary', $currentUser, $tab, $csrf); ?>
   <main class="content">
     <header class="topbar"><div><span class="breadcrumb">ЛИЧНЫЙ КАБИНЕТ / СЕКРЕТАРЬ</span><h1><?= $tab === 'enroll' ? 'Зачисление студента' : 'Студенты' ?></h1></div><div class="date-block"><span>СЕГОДНЯ</span><b><?= sh(date('d.m.Y', strtotime($today))) ?></b></div></header>
     <div class="page-stack">
@@ -242,7 +236,7 @@ function secRenderCollection(string $section, array $rows, array $specialties): 
             <?php else: ?>
               <div class="sec-table-wrap"><table class="sec-table"><thead><tr><th>Студент</th><th>Корпус / группа</th><th>Дата рождения</th><th>Телефон</th><th>Статус</th><th></th></tr></thead><tbody>
                 <?php foreach ($students as $row): ?>
-                  <tr><td><b><?= sh($row['fio']) ?></b></td><td><?= sh($row['campus_name'] ?? 'Не указан') ?><small><?= sh($row['group_name']) ?></small></td><td><?= $row['birth_date'] ? sh(date('d.m.Y', strtotime($row['birth_date']))) : '—' ?></td><td><?= sh($row['phone'] ?? '—') ?></td><td><span class="tag"><?= $row['expulsion_date'] ? 'Отчислен' : 'Обучается' ?></span></td><td><a class="sec-button" href="<?= sh('secretary.php?' . http_build_query(['campus' => $campusFilter, 'group' => $groupFilter, 'student' => $studentFilter, 'status' => $status, 'page' => $page, 'id' => $row['id']])) ?>#card">Карточка</a></td></tr>
+                  <tr><td><b><?= sh($row['fio']) ?></b></td><td><?= sh($row['campus_name'] ?? 'Не указан') ?><small><?= sh($row['group_name']) ?></small></td><td><?= $row['birth_date'] ? sh(date('d.m.Y', strtotime($row['birth_date']))) : '—' ?></td><td><?= sh(secPhone($row['phone']) ?? '—') ?></td><td><span class="tag"><?= $row['expulsion_date'] ? 'Отчислен' : 'Обучается' ?></span></td><td><a class="sec-button" href="<?= sh('secretary.php?' . http_build_query(['campus' => $campusFilter, 'group' => $groupFilter, 'student' => $studentFilter, 'status' => $status, 'page' => $page, 'id' => $row['id']])) ?>#card">Карточка</a></td></tr>
                 <?php endforeach; ?>
               </tbody></table></div>
               <?php if ($pages > 1): ?><nav class="sec-pagination" aria-label="Страницы"><span><?= $page ?> / <?= $pages ?></span><?php foreach ([$page - 1 => '← Назад', $page + 1 => 'Далее →'] as $n => $label): ?><?php if ($n >= 1 && $n <= $pages): ?><a href="<?= sh('secretary.php?' . http_build_query(['campus' => $campusFilter, 'group' => $groupFilter, 'student' => $studentFilter, 'status' => $status, 'page' => $n])) ?>"><?= sh($label) ?></a><?php endif; ?><?php endforeach; ?></nav><?php endif; ?>

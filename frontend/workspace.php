@@ -15,9 +15,19 @@ $role = $workspaceRole;
 $tab = $_GET["tab"];
 $db = connectDB();
 $message = "";
+$redirect = $_GET;
 $profile = in_array($role, ["teacher", "student"], true)
     ? cabScope($db, $user)
     : null;
+if ($role === 'teacher' && $tab === 'finals' && $_SERVER['REQUEST_METHOD'] === 'GET'
+    && ($_GET['download'] ?? null) === 'csv') {
+    if (!$profile) {
+        http_response_code(403);
+        exit('К аккаунту не привязан профиль преподавателя.');
+    }
+    teacherFinals($db, $profile, true);
+    exit;
+}
 if ($_SERVER["REQUEST_METHOD"] === "POST") {
     try {
         if (
@@ -82,6 +92,12 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
                 throw new RuntimeException("Выберите вид итоговой отметки.");
             }
             teacherSave($db, (int) $profile["id"], $payload);
+        } elseif ($role === 'secretary' && $tab === 'statements') {
+            $redirect = secretarySaveStatement($db, $_POST);
+        } elseif ($role === 'secretary' && $tab === 'schedule') {
+            require_once __DIR__ . '/../api/teacher.php';
+            $day = secretaryAddLesson($db, $_POST);
+            $redirect = ['tab'=>'schedule', 'group'=>(int) $_POST['group'], 'day'=>$day->format('Y-m-d')];
         } else {
             throw new RuntimeException("Действие недоступно.");
         }
@@ -92,7 +108,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
             echo json_encode(["ok" => true]);
             exit();
         }
-        header("Location: " . $role . ".php?" . http_build_query($_GET));
+        header("Location: " . $role . ".php?" . http_build_query($redirect));
         exit();
     } catch (Throwable $e) {
         if ($db->inTransaction()) {
@@ -100,7 +116,7 @@ if ($_SERVER["REQUEST_METHOD"] === "POST") {
         }
         $message =
             $e instanceof PDOException
-                ? "Проверьте выбранный корпус и руководителя."
+                ? "Не удалось сохранить данные. Проверьте, что установлена миграция из архива."
                 : $e->getMessage();
         if (str_contains($_SERVER["HTTP_ACCEPT"] ?? "", "application/json")) {
             http_response_code(400);
@@ -126,16 +142,47 @@ cabShell($role, $user, $tab, function () use (
         echo '<p class="panel cab-empty">К аккаунту не привязан единственный профиль.</p>';
         return;
     }
+    if ($tab === 'statements' && $role === 'secretary') {
+        secretaryStatements($db);
+        return;
+    }
+    if ($tab === 'schedule' && $role === 'secretary') {
+        require_once __DIR__ . '/../api/teacher.php';
+        secretarySchedule($db);
+        return;
+    }
+    if ($tab === 'group' && $role === 'teacher') {
+        cabTeacherGroup($db, (int) $profile['id']);
+        return;
+    }
     if ($tab === "schedule") {
         cabSchedule($db, $role, $profile);
         return;
     }
-    if (in_array($tab, ["group", "groups"], true)) {
-        $groupId =
-            $role === "student"
-                ? (int) $profile["in_group"]
-                : (filter_var($_GET["group"] ?? 0, FILTER_VALIDATE_INT) ?:
-                0);
+    if ($tab === 'groups') {
+        $groupId = filter_var($_GET['group'] ?? 0, FILTER_VALIDATE_INT) ?: 0;
+        if ($role === "secretary") {
+
+            $campuses = cabQuery(
+                $db,
+                "SELECT id,name FROM public.campuses ORDER BY name",
+            )->fetchAll(PDO::FETCH_KEY_PAIR);
+            $teachers = cabQuery(
+                $db,
+                "SELECT id,fio FROM public.teachers ORDER BY public.diary_name_sort(fio) COLLATE \"C\", fio, id",
+            )->fetchAll(PDO::FETCH_KEY_PAIR);
+            ?><section class="panel"><header class="panel-head"><h3>Создать группу</h3></header><form method="post" class="cab-filters"><input type="hidden" name="csrf" value="<?= ch(
+    $_SESSION["csrf_token"],
+) ?>"><label>Название<input name="name" maxlength="10" required></label><?php
+cabSelect("campus", "Корпус", ["" => "Не указан"] + $campuses, "");
+cabSelect(
+    "teacher",
+    "Классный руководитель",
+    ["" => "Выберите"] + $teachers,
+    "",
+);
+?><button class="primary">Создать группу</button></form></section><?php
+        }
         $sorts = [
             "az" => "От А до Я",
             "za" => "От Я до А",
@@ -181,45 +228,26 @@ cabShell($role, $user, $tab, function () use (
                 " · " .
                 ch($group["campus"] ?? "Корпус не указан") .
                 "</h3></header>";
-            // Студенту доступны только ФИО одногруппников.
             $rows = cabQuery(
                 $db,
-                "SELECT s.id,s.fio AS name,s.birth_date,s.phone,s.email,
+                "SELECT s.id,s.fio AS name,
           AVG(CASE WHEN e.grade IN ('2','3','4','5') THEN e.grade::int END) AS average,
           COUNT(*) FILTER(WHERE e.grade IN ('н','Н')) AS absences
           FROM public.students s LEFT JOIN public.evaluations e ON e.student_id=s.id
           WHERE s.in_group=? GROUP BY s.id,s.fio ORDER BY " .
-                    ($role === "head" ? $order : "name ASC") .
+                    (in_array($sort, ['az','za'], true) || $role !== 'head'
+                        ? 'public.diary_name_sort(s.fio) COLLATE "C" ' . ($role === 'head' && $sort === 'za' ? 'DESC' : 'ASC')
+                        : $order) .
                     ",s.id",
                 [$groupId],
             )->fetchAll(PDO::FETCH_ASSOC);
             echo '<div class="cab-scroll"><table class="cab-table"><thead><tr><th>Студент</th>';
-            if ($role === "student") {
-                echo "<th>Дата рождения</th><th>Телефон</th><th>Электронная почта</th>";
-            }
-
             if ($role === "head") {
                 echo "<th>Средний балл</th><th>Пропуски</th>";
             }
             echo "</tr></thead><tbody>";
             foreach ($rows as $row) {
                 echo "<tr><td>" . ch($row["name"]) . "</td>";
-                if ($role === "student") {
-                    echo "<td>" .
-                        ch(
-                            $row["birth_date"]
-                                ? (new DateTimeImmutable(
-                                    $row["birth_date"],
-                                ))->format("d.m.Y")
-                                : "—",
-                        ) .
-                        "</td><td>" .
-                        ch($row["phone"] ?? "—") .
-                        "</td><td>" .
-                        ch($row["email"] ?? "—") .
-                        "</td>";
-                }
-
                 if ($role === "head") {
                     echo "<td>" .
                         ($row["average"] === null
@@ -285,144 +313,13 @@ cabShell($role, $user, $tab, function () use (
             }
             echo "</tbody></table></div></section>";
         }
-        if ($role === "secretary") {
-
-            $campuses = cabQuery(
-                $db,
-                "SELECT id,name FROM public.campuses ORDER BY name",
-            )->fetchAll(PDO::FETCH_KEY_PAIR);
-            $teachers = cabQuery(
-                $db,
-                "SELECT id,fio FROM public.teachers ORDER BY fio",
-            )->fetchAll(PDO::FETCH_KEY_PAIR);
-            ?><section class="panel"><header class="panel-head"><h3>Создать группу</h3></header><form method="post" class="cab-filters"><input type="hidden" name="csrf" value="<?= ch(
-    $_SESSION["csrf_token"],
-) ?>"><label>Название<input name="name" maxlength="10" required></label><?php
-cabSelect("campus", "Корпус", ["" => "Не указан"] + $campuses, "");
-cabSelect(
-    "teacher",
-    "Классный руководитель",
-    ["" => "Выберите"] + $teachers,
-    "",
-);
-?><button class="primary">Создать группу</button></form></section><?php
-        }
         return;
     }
     if ($role === "student" && in_array($tab, ["monthly", "finals"], true)) {
         cabStudentResults($db, $profile, $tab);
         return;
     }
-    if (in_array($tab, ["monthly", "finals"], true)) {
-
-        $today = new DateTimeImmutable(
-            "now",
-            new DateTimeZone("Asia/Novosibirsk"),
-        );
-        $year =
-            filter_var($_GET["year"] ?? "", FILTER_VALIDATE_INT, [
-                "options" => ["min_range" => 1900, "max_range" => 9998],
-            ]) ?:
-            (int) $today->format("Y") - ((int) $today->format("n") < 9 ? 1 : 0);
-        $semester = ($_GET["semester"] ?? "1") === "2" ? 2 : 1;
-        $start = sprintf(
-            "%04d-%02d-01",
-            $year + ($semester === 2 ? 1 : 0),
-            $semester === 1 ? 9 : 1,
-        );
-        $end = $semester === 1 ? $year + 1 . "-01-01" : $year + 1 . "-07-01";
-        $group = 0;
-        $subject = 0;
-        $student = 0;
-        ?><form class="cab-filters"><input type="hidden" name="tab" value="<?= ch(
-    $tab,
-) ?>"><label>Начало учебного года<input type="number" name="year" min="1900" max="9998" value="<?= $year ?>" required></label><?php
-cabSelect("semester", "Семестр", [1 => "Первый", 2 => "Второй"], $semester);
-if ($role === "teacher") {
-    $assignments = cabQuery(
-        $db,
-        "SELECT DISTINCT g.id,g.name,s.id AS subject_id,s.name AS subject FROM public.lessons l JOIN public.stud_groups g ON g.id=l.in_group JOIN public.subjects s ON s.id=l.subject WHERE l.teacher=? AND l.date>=? AND l.date<? ORDER BY g.name,s.name",
-        [$profile["id"], $year . "-09-01", $year + 1 . "-07-01"],
-    )->fetchAll(PDO::FETCH_ASSOC);
-    $groups = array_column($assignments, "name", "id");
-    $group = (int) ($_GET["group"] ?? 0);
-    if (!isset($groups[$group])) {
-        $group = (int) array_key_first($groups);
-    }
-    $subjects = [];
-    foreach ($assignments as $a) {
-        if ((int) $a["id"] === $group) {
-            $subjects[$a["subject_id"]] = $a["subject"];
-        }
-    }
-    $subject = (int) ($_GET["subject"] ?? 0);
-    if (!isset($subjects[$subject])) {
-        $subject = (int) array_key_first($subjects);
-    }
-    cabSelect("group", "Группа", $groups, $group);
-    cabSelect("subject", "Предмет", $subjects, $subject);
-    $roster = cabQuery(
-        $db,
-        "SELECT id,fio FROM public.students WHERE in_group=? ORDER BY fio",
-        [$group],
-    )->fetchAll(PDO::FETCH_KEY_PAIR);
-    $student = (int) ($_GET["student"] ?? 0);
-    if (!isset($roster[$student])) {
-        $student = 0;
-    }
-    cabSelect("student", "Студент", [0 => "Все студенты"] + $roster, $student);
-}
-?><button class="primary" hidden>Показать</button><?= cabinetResetLink() ?></form><?php
-$sql =
-    "SELECT a.*,s.name AS subject,t.fio FROM public.teacher_attestations a JOIN public.subjects s ON s.id=a.subject_id JOIN public.teachers t ON t.id=a.teacher_id WHERE a.period_start>=? AND a.period_start<?";
-$args = [$start, $end];
-if ($role === "student") {
-    $sql .= " AND a.student_id=?";
-    $args[] = $profile["id"];
-} else {
-    $sql .= " AND a.teacher_id=? AND a.group_id=? AND a.subject_id=?";
-    array_push($args, $profile["id"], $group, $subject);
-}
-$sql .=
-    $tab === "monthly"
-        ? " AND a.kind='month'"
-        : " AND a.kind IN ('exam','diff','credit')";
-$rows = cabQuery(
-    $db,
-    $sql . " ORDER BY a.period_start,a.subject_id,a.student_id",
-    $args,
-)->fetchAll(PDO::FETCH_ASSOC);
-$kinds = ["exam" => "Экзамен", "diff" => "Дифзачёт", "credit" => "Зачёт"];
-$marks = [];
-foreach ($rows as $r) {
-    $marks[$r["student_id"]][$r["kind"]] = $r;
-}
-$records = [];
-foreach ($roster as $id => $fio) {
-    if ($student && $student !== (int) $id) {
-        continue;
-    }
-    foreach ($kinds as $kind => $label) {
-        $entry = $marks[$id][$kind] ?? [];
-        $data = [
-            "kind" => $kind,
-            "period" => $start,
-            "group" => $group,
-            "subject" => $subject,
-            "student" => $id,
-            "previous" => $entry["grade"] ?? null,
-        ];
-        $records[] = $entry + [
-            "subject" => $subjects[$subject] ?? "",
-            "fio" => $profile["fio"],
-            "student_name" => $fio,
-            "period_start" => $start,
-            "kind" => $kind,
-            "_edit" => $data,
-        ];
-    }
-}
-cabRecordBook($records, true);
-
+    if ($role === 'teacher' && $tab === 'finals') {
+        teacherFinals($db, $profile);
     }
 });

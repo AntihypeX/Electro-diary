@@ -14,7 +14,8 @@ if (!function_exists("getCurrentUser")) {
         $statement = $pdo->prepare(
             <<<'SQL'
             SELECT a.id, a.login, LOWER(BTRIM(r.name)) AS role,
-                   COALESCE(t.fio, s.fio, sec.name, a.login) AS name
+                   COALESCE(t.fio, s.fio, sec.name,
+                            NULLIF(BTRIM(to_jsonb(a)->>'full_name'), ''), a.login) AS name
             FROM public.auth a
             JOIN public.roles r ON r.id = a.role_id
             LEFT JOIN public.teachers t ON t.auth_id = a.id
@@ -85,32 +86,3 @@ function cabinetTeacherTabs(): array
     ];
 }
 
-function cabinetTeacherNav(string $active, array $filters = []): void
-{
-    echo '<nav aria-label="Кабинет преподавателя">';
-    foreach (cabinetTeacherTabs() as $key => [$title, $icon]) {
-        $params =
-            ["tab" => $key] +
-            (in_array($key, ["journal", "attestation"], true) ? $filters : []);
-        $href = htmlspecialchars(
-            "teacher.php?" . http_build_query($params),
-            ENT_QUOTES,
-            "UTF-8",
-        );
-        $title = htmlspecialchars($title, ENT_QUOTES, "UTF-8");
-        echo '<a href="' .
-            $href .
-            '" aria-label="' .
-            $title .
-            '" title="' .
-            $title .
-            '"' .
-            ($active === $key ? ' aria-current="page"' : "") .
-            '><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' .
-            $icon .
-            "</svg><span>" .
-            $title .
-            "</span></a>";
-    }
-    echo "</nav>";
-}

@@ -76,6 +76,9 @@ function teacherLockStudent(PDO $db, int $student, int $group): void
 function teacherSave(PDO $db, int $teacher, array $input): string
 {
     $action = $input["action"] ?? "";
+    if ($action === 'attestation_auto') {
+        return teacherAutoAttestation($db, $teacher, $input);
+    }
     if (
         in_array(
             $action,
@@ -102,7 +105,7 @@ function teacherSave(PDO $db, int $teacher, array $input): string
         <<<'SQL'
         SELECT l.in_group, l.subject, l.topic, l.lesson_type, t.name AS topic_name
         FROM public.lessons l
-        JOIN public.lesson_topics t ON t.id = l.topic
+        LEFT JOIN public.lesson_topics t ON t.id = l.topic
         WHERE l.id = ? AND l.teacher = ?
         FOR UPDATE OF l
         SQL
@@ -117,7 +120,7 @@ function teacherSave(PDO $db, int $teacher, array $input): string
     }
 
     if ($action === "lesson") {
-        return teacherSaveLesson($db, $lessonId, $lesson, $input);
+        return teacherSaveLesson($db, $teacher, $lessonId, $lesson, $input);
     }
 
     $student = teacherId($input["student"] ?? null);
@@ -161,6 +164,9 @@ function teacherSave(PDO $db, int $teacher, array $input): string
                 409,
             );
         }
+        if ($lesson['lesson_type'] === 'Экзамен' && (count($grades) !== 1 || $currentGrades)) {
+            throw new TeacherRequestError('За экзамен можно поставить только одну отметку. Измените существующую.', 409);
+        }
         if (
             array_intersect($currentGrades, ["н", "Н"]) ||
             ($currentGrades && in_array("н", $grades, true))
@@ -184,7 +190,7 @@ function teacherSave(PDO $db, int $teacher, array $input): string
 
     if ($action === "grade_delete") {
         $previous = $input["previous"] ?? null;
-        if (!in_array($previous, TEACHER_GRADE_VALUES, true)) {
+        if (!in_array($previous, [...TEACHER_GRADE_VALUES, "Н"], true)) {
             throw new TeacherRequestError("Некорректная отметка.", 400);
         }
         $deleted = teacherQuery(
@@ -236,11 +242,13 @@ function teacherSave(PDO $db, int $teacher, array $input): string
     $updated = teacherQuery(
         $db,
         <<<'SQL'
-        UPDATE public.evaluations SET grade = ?
+        UPDATE public.evaluations
+        SET previous_grade = CASE WHEN ?::boolean AND grade <> ? THEN grade ELSE previous_grade END,
+            grade = ?
         WHERE id = ? AND lesson_id = ? AND student_id = ? AND grade = ?
         SQL
         ,
-        [$grade, $gradeId, $lessonId, $student, $previous],
+        [$lesson['lesson_type'] === 'Экзамен' ? 'true' : 'false', $grade, $grade, $gradeId, $lessonId, $student, $previous],
     );
     if ($updated->rowCount() !== 1) {
         throw new TeacherRequestError(
@@ -254,37 +262,53 @@ function teacherSave(PDO $db, int $teacher, array $input): string
 
 function teacherSaveLesson(
     PDO $db,
+    int $teacher,
     int $lessonId,
     array $lesson,
     array $input,
 ): string {
-    $topicId = teacherId($input["topic"] ?? null);
-    $topic = teacherQuery(
-        $db,
-        "SELECT id, lesson_type FROM public.lesson_topics WHERE id = ? AND subj_id = ?",
-        [$topicId, $lesson["subject"]],
-    )->fetch(PDO::FETCH_ASSOC);
-    if (!$topic) {
-        throw new TeacherRequestError(
-            "Выберите тему из списка тем этого предмета.",
-            400,
-        );
+    if (($lesson['topic_name'] ?? '') !== ($input['previousTopic'] ?? null)
+        || ($lesson['lesson_type'] ?? '') !== ($input['previousType'] ?? null)) {
+        throw new TeacherRequestError('Занятие уже изменилось. Обновите страницу и проверьте данные.', 409);
     }
-    $type = $topic["lesson_type"] ?? ($input["type"] ?? null);
+
+    $name = $input['newTopic'] ?? '';
+    if (!is_string($name)) {
+        throw new TeacherRequestError('Некорректное название темы.', 400);
+    }
+    $name = trim($name);
+    if ($name !== '' && !preg_match('/\A[^\p{C}]{1,100}\z/u', $name)) {
+        throw new TeacherRequestError('Введите название темы длиной до 100 символов.', 400);
+    }
+
+    $type = $input['type'] ?? null;
+    if ($name === '') {
+        $topicId = teacherId($input['topic'] ?? null);
+        $topic = teacherQuery($db, "SELECT t.id,to_jsonb(t)->>'lesson_type' AS lesson_type
+            FROM public.lesson_topics t WHERE t.id=? AND t.subj_id=? AND (t.teacher_id IS NULL OR t.teacher_id=?)",
+            [$topicId,$lesson['subject'],$teacher])->fetch(PDO::FETCH_ASSOC);
+        if (!$topic) {
+            throw new TeacherRequestError('Выберите доступную тему этого предмета.', 400);
+        }
+        $type = $topic['lesson_type'] ?? $type;
+    } else {
+        $topicId = teacherQuery($db, 'INSERT INTO public.lesson_topics (name,subj_id,teacher_id)
+            VALUES (?,?,?) ON CONFLICT DO NOTHING RETURNING id', [$name,$lesson['subject'],$teacher])->fetchColumn();
+        if (!$topicId) {
+            $topicId = teacherQuery($db, 'SELECT id FROM public.lesson_topics
+                WHERE subj_id=? AND teacher_id=? AND lower(btrim(name))=lower(?)',
+                [$lesson['subject'],$teacher,$name])->fetchColumn();
+        }
+    }
     if (!in_array($type, TEACHER_LESSON_TYPES, true)) {
-        throw new TeacherRequestError(
-            "Для темы без заданного вида выберите вид занятия.",
-            400,
-        );
+        throw new TeacherRequestError('Выберите вид занятия.', 400);
     }
-    if (
-        $lesson["topic_name"] !== ($input["previousTopic"] ?? null) ||
-        ($lesson["lesson_type"] ?? "") !== ($input["previousType"] ?? null)
+    if ($type === 'Экзамен' && $lesson['lesson_type'] !== 'Экзамен' &&
+        teacherQuery($db, "SELECT 1 FROM public.evaluations
+            WHERE lesson_id=? AND student_id IS NOT NULL AND NULLIF(BTRIM(grade), '') IS NOT NULL
+            GROUP BY student_id HAVING COUNT(*) > 1 LIMIT 1", [$lessonId])->fetchColumn()
     ) {
-        throw new TeacherRequestError(
-            "Занятие уже изменилось. Обновите страницу и проверьте данные.",
-            409,
-        );
+        throw new TeacherRequestError('Уберите лишние отметки у студентов, прежде чем сделать занятие экзаменом.', 409);
     }
     teacherQuery(
         $db,
@@ -340,22 +364,17 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
     $subject = teacherId($input["subject"] ?? null);
     $year = (int) $parts[1] - ($month <= 6 ? 1 : 0);
 
-    if (
-        !teacherQuery(
-            $db,
-            <<<'SQL'
-            SELECT id FROM public.lessons
-            WHERE teacher = ? AND in_group = ? AND subject = ? AND date >= ? AND date < ?
-            LIMIT 1
-            SQL
-            ,
-            [$teacher, $group, $subject, "$year-09-01", $year + 1 . "-07-01"],
-        )->fetchColumn()
-    ) {
-        throw new TeacherRequestError(
-            "В этом учебном году у вас нет занятий по предмету в выбранной группе.",
-            404,
-        );
+    if (in_array($kind, ['exam','diff','credit'], true)) {
+        $assigned = teacherQuery($db, 'SELECT 1 FROM public.diary_statements
+            WHERE group_id=? AND subject_id=? AND period_start=? AND teacher_id=? AND kind=? FOR SHARE',
+            [$group,$subject,$period,$teacher,$kind])->fetchColumn();
+        if (!$assigned) {
+            throw new TeacherRequestError('Форма контроля или преподаватель не совпадает с ведомостью.', 409);
+        }
+    } elseif (!teacherQuery($db, 'SELECT 1 FROM public.lessons
+        WHERE teacher=? AND in_group=? AND subject=? AND date>=? AND date<? LIMIT 1',
+        [$teacher,$group,$subject,"$year-09-01",($year+1)."-07-01"])->fetchColumn()) {
+        throw new TeacherRequestError('В этом учебном году у вас нет занятий по предмету в выбранной группе.', 404);
     }
     teacherLockStudent($db, $student, $group);
 
@@ -390,20 +409,12 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
                 400,
             );
         }
-        $hours = $input["hours"] ?? "";
-        $hours =
-            $hours === ""
-                ? null
-                : filter_var($hours, FILTER_VALIDATE_INT, [
-                    "options" => ["min_range" => 0, "max_range" => 10000],
-                ]);
         $date = $input["assessed_on"] ?? "";
         $parsed = is_string($date)
             ? DateTimeImmutable::createFromFormat("!Y-m-d", $date)
             : false;
         $statement = $input["statement_number"] ?? "";
         if (
-            $hours === false ||
             !is_string($date) ||
             ($date !== "" &&
                 (!$parsed || $parsed->format("Y-m-d") !== $date)) ||
@@ -412,21 +423,19 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
             !is_array($input["expectedDetails"] ?? null)
         ) {
             throw new TeacherRequestError(
-                "Проверьте часы, дату и номер ведомости.",
+                "Проверьте дату и номер ведомости.",
                 400,
             );
         }
         $expected = $input["expectedDetails"];
         $updated = teacherQuery(
             $db,
-            "UPDATE public.teacher_attestations SET hours=?,assessed_on=?,statement_number=? WHERE teacher_id=? AND group_id=? AND subject_id=? AND period_start=? AND kind=? AND student_id=? AND grade=? AND hours IS NOT DISTINCT FROM ?::integer AND assessed_on IS NOT DISTINCT FROM ?::date AND statement_number IS NOT DISTINCT FROM ?::text",
+            "UPDATE public.teacher_attestations SET assessed_on=?,statement_number=? WHERE teacher_id=? AND group_id=? AND subject_id=? AND period_start=? AND kind=? AND student_id=? AND grade=? AND assessed_on IS NOT DISTINCT FROM ?::date AND statement_number IS NOT DISTINCT FROM ?::text",
             [
-                $hours,
                 $date ?: null,
                 trim($statement) ?: null,
                 ...$key,
                 $previous,
-                $expected["hours"] ?? null,
                 $expected["assessed_on"] ?? null,
                 $expected["statement_number"] ?? null,
             ],
@@ -455,12 +464,14 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
         $saved = teacherQuery(
             $db,
             <<<'SQL'
-            UPDATE public.teacher_attestations SET grade = ?
+            UPDATE public.teacher_attestations
+            SET previous_grade = CASE WHEN kind = 'exam' AND grade <> ? THEN grade ELSE previous_grade END,
+                grade = ?
             WHERE teacher_id = ? AND group_id = ? AND subject_id = ? AND period_start = ?
               AND kind = ? AND student_id = ? AND grade = ?
             SQL
             ,
-            [$grade, ...$key, $previous],
+            [$grade, $grade, ...$key, $previous],
         );
     }
     if ($saved->rowCount() !== 1) {
@@ -471,4 +482,71 @@ function teacherSaveAttestation(PDO $db, int $teacher, array $input): string
     }
 
     return "Результат аттестации сохранён.";
+}
+
+
+function teacherAutoAttestation(PDO $db, int $teacher, array $input): string
+{
+    $group = teacherId($input['group'] ?? null);
+    $subject = teacherId($input['subject'] ?? null);
+    $year = filter_var($input['year'] ?? null, FILTER_VALIDATE_INT, [
+        'options'=>['min_range'=>1900, 'max_range'=>9998],
+    ]);
+    $semester = $input['semester'] ?? null;
+    $month = $input['month'] ?? null;
+    $months = match ($semester) {
+        1 => [9, 10, 11, 12],
+        2 => [1, 2, 3, 4, 5, 6],
+        default => [],
+    };
+    if (!$year || !$months || ($month !== 0 && !in_array($month, $months, true))) {
+        throw new TeacherRequestError('Выберите учебный год, семестр и месяц.', 400);
+    }
+    $startOf = static fn (int $m): DateTimeImmutable =>
+        new DateTimeImmutable(sprintf('%04d-%02d-01', $year + ($m < 9 ? 1 : 0), $m));
+    $periods = [];
+    $parameters = [];
+    foreach ($month ? [$month] : $months as $m) {
+        $start = $startOf($m);
+        $periods[] = '(?::date, ?::date)';
+        array_push($parameters, $start->format('Y-m-d'), $start->modify('+1 month')->format('Y-m-d'));
+    }
+    $student = ($input['student'] ?? 0) === 0 ? 0 : teacherId($input['student']);
+    if ($student) {
+        teacherLockStudent($db, $student, $group);
+    }
+
+    $values = implode(', ', $periods);
+    $sql = <<<SQL
+        WITH periods(start_date, end_date) AS (VALUES $values)
+        INSERT INTO public.teacher_attestations
+            (teacher_id, group_id, subject_id, student_id, period_start, kind, grade)
+        SELECT l.teacher, l.in_group, l.subject, e.student_id, p.start_date, 'month',
+               ROUND(AVG(CASE WHEN e.grade IN ('2','3','4','5') THEN e.grade::integer END))::text
+        FROM periods p JOIN public.lessons l ON l.date >= p.start_date AND l.date < p.end_date
+        JOIN public.evaluations e ON e.lesson_id=l.id
+        JOIN public.students s ON s.id=e.student_id AND s.in_group=l.in_group
+        WHERE l.teacher=? AND l.in_group=? AND l.subject=?
+          AND e.grade IN ('2','3','4','5') AND (?::integer=0 OR s.id=?)
+        GROUP BY l.teacher, l.in_group, l.subject, e.student_id, p.start_date
+        ON CONFLICT DO NOTHING
+        SQL;
+    $count = teacherQuery($db, $sql, [...$parameters, $teacher, $group, $subject, $student, $student])->rowCount();
+
+    // Читаем месячные отметки после записи, в той же транзакции.
+    $first = $startOf($months[0])->format('Y-m-d');
+    $end = $startOf($months[count($months)-1])->modify('+1 month')->format('Y-m-d');
+    $semesters = teacherQuery($db, <<<'SQL'
+        INSERT INTO public.teacher_attestations
+            (teacher_id, group_id, subject_id, student_id, period_start, kind, grade)
+        SELECT a.teacher_id,a.group_id,a.subject_id,a.student_id,?::date,'semester',
+               ROUND(AVG(CASE WHEN a.grade IN ('2','3','4','5') THEN a.grade::int END))::text
+        FROM public.teacher_attestations a JOIN public.students s ON s.id=a.student_id AND s.in_group=a.group_id
+        WHERE a.teacher_id=? AND a.group_id=? AND a.subject_id=? AND a.kind='month'
+          AND a.period_start>=? AND a.period_start<? AND (?::integer=0 OR s.id=?)
+        GROUP BY a.teacher_id,a.group_id,a.subject_id,a.student_id
+        HAVING COUNT(*)=? AND COUNT(*) FILTER (WHERE a.grade IN ('2','3','4','5'))>0
+        ON CONFLICT DO NOTHING
+        SQL, [$first,$teacher,$group,$subject,$first,$end,$student,$student,count($months)])->rowCount();
+    return "Заполнено месячных отметок: $count. Семестровых: $semesters.";
 }

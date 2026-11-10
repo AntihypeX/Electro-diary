@@ -42,6 +42,17 @@ function secDate(?string $value, string $label): ?string
     return $value;
 }
 
+function secPhone(?string $value): ?string
+{
+    if ($value === null || !preg_match('/\A\+?[0-9\s().-]+\z/u', $value)) return $value;
+
+    $digits = preg_replace('/[^0-9]/', '', $value);
+    if (str_starts_with($value, '+') && !preg_match('/\A7[0-9]{10}\z/', $digits)) return $value;
+    if (!preg_match('/\A(?:[78])?([0-9]{3})([0-9]{3})([0-9]{2})([0-9]{2})\z/', $digits, $parts)) return $value;
+
+    return "+7 ({$parts[1]}) {$parts[2]}-{$parts[3]}-{$parts[4]}";
+}
+
 function secValues(string $section, mixed $input): array
 {
     if (!is_array($input)) throw new SecretaryError('Не получен раздел карточки.');
@@ -49,6 +60,7 @@ function secValues(string $section, mixed $input): array
     foreach (secretaryFields()[$section][1] as $key => [$label, $type]) {
         $value = secText($input[$key] ?? '', $label, $type === 'textarea' ? 5000 : 500);
         if ($type === 'required' && $value === null) throw new SecretaryError('Заполните поле «' . $label . '».');
+        if ($type === 'tel') $value = secPhone($value);
         if ($type === 'date') $value = secDate($value, $label);
         if (in_array($type, ['select', 'bool'], true)) {
             $options = secretaryFields()[$section][1][$key][2];

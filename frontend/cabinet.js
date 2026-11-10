@@ -75,6 +75,8 @@ document
   });
 
 document.querySelectorAll(".cab-day-nav summary").forEach((summary) => {
+  const date = summary.parentElement.querySelector('input[type=date]');
+  date?.addEventListener('change', () => { if (date.value) date.form.requestSubmit(); });
   summary.addEventListener("click", (event) => {
     event.preventDefault();
     const details = summary.parentElement;
@@ -144,7 +146,7 @@ document.addEventListener("click", async (event) => {
   const dialog = document.createElement("dialog");
   dialog.className = "cab-avatar-dialog";
   dialog.innerHTML =
-    '<form class="record-details-form"><h2>Сведения о результате</h2><p class="record-context"></p><label>Количество часов<input name="hours" type="number" min="0" max="10000"></label><label>Номер ведомости<input name="statement_number" maxlength="100"></label><label>Дата выставления<input type="date" name="assessed_on"></label><p role="alert"></p><div class="cab-actions"><button type="button" class="cab-button">Отмена</button><button type="submit" class="primary">Сохранить</button></div></form>';
+    '<form class="record-details-form"><h2>Сведения о результате</h2><p class="record-context"></p><label>Номер ведомости<input name="statement_number" maxlength="100"></label><label>Дата выставления<input type="date" name="assessed_on"></label><p role="alert"></p><div class="cab-actions"><button type="button" class="cab-button">Отмена</button><button type="submit" class="primary">Сохранить</button></div></form>';
   const form = dialog.querySelector("form");
   dialog.querySelector(".record-context").textContent =
     record.student + " · " + record.subject + " · " + record.kind;
@@ -172,7 +174,7 @@ document.addEventListener("click", async (event) => {
         grade: record.key.previous,
         expectedDetails: record.details,
       };
-      for (const name of ["hours", "statement_number", "assessed_on"])
+      for (const name of ["statement_number", "assessed_on"])
         payload[name] = form.elements[name].value;
       const body = new FormData();
       body.append("csrf", account.csrf);
@@ -194,4 +196,61 @@ document.addEventListener("click", async (event) => {
   };
   document.body.append(dialog);
   dialog.showModal();
+});
+
+// Смена формы контроля показывает отдельную сохранённую запись этого вида.
+document.querySelectorAll('[data-schedule-form]').forEach(form => {
+  const subject = form.elements.subject;
+  const topic = form.elements.topic;
+  function updateTopics() {
+    topic.value = '';
+    const entry = subject.selectedOptions[0]?.dataset;
+    form.elements.teacher_display.value = entry?.teacher ?? '';
+    form.elements.hours_display.value = entry?.hours ?? '';
+    form.elements.control_display.value = entry?.control ?? '';
+    for (const option of topic.options) {
+      const visible = !option.value || option.dataset.subject === subject.value;
+      option.hidden = !visible;
+      option.disabled = !visible;
+    }
+  }
+  subject.addEventListener('change', updateTopics);
+  updateTopics();
+});
+
+// Длинные таблицы и списки сохраняют первые десять строк в видимой области.
+function limitVisibleItems(viewport, items, content) {
+  if (items.length <= 10) return;
+  viewport.classList.add('cab-list-scroll');
+  if (!viewport.hasAttribute('tabindex')) viewport.tabIndex = 0;
+  if (!viewport.hasAttribute('aria-label')) {
+    viewport.setAttribute('aria-label', 'Прокручиваемый список');
+  }
+  function measure() {
+    if (!viewport.offsetWidth) return;
+    const last = items[9].getBoundingClientRect();
+    const top = viewport.getBoundingClientRect().top;
+    const scrollbar = viewport.offsetHeight - viewport.clientHeight;
+    const maxHeight = Math.ceil(last.bottom - top + viewport.scrollTop + scrollbar);
+    if (maxHeight > 0) viewport.style.maxHeight = maxHeight + 'px';
+  }
+  const observer = new ResizeObserver(measure);
+  observer.observe(content);
+  viewport.closest('details')?.addEventListener('toggle', measure);
+  measure();
+}
+
+document.querySelectorAll('.app-shell table').forEach(table => {
+  const rows = Array.from(table.tBodies).flatMap(body => Array.from(body.rows));
+  if (rows.length <= 10) return;
+  let viewport = table.parentElement;
+  if (!viewport.matches('.cab-scroll, .matrix-container, .head-scroll, .sec-table-wrap, .table-wrap')) {
+    viewport = document.createElement('div');
+    table.before(viewport);
+    viewport.append(table);
+  }
+  limitVisibleItems(viewport, rows, table);
+});
+document.querySelectorAll('.teacher-lesson-list').forEach(list => {
+  limitVisibleItems(list, Array.from(list.children), list);
 });

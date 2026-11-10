@@ -1,12 +1,16 @@
 <?php
 
 $workspaceRole = 'student';
-if (in_array($_GET['tab'] ?? '', ['schedule', 'monthly', 'finals', 'group'], true)) {
+if (($_GET['tab'] ?? '') === 'group') {
+    header('Location: student.php');
+    exit;
+}
+if (in_array($_GET['tab'] ?? '', ['schedule', 'monthly', 'finals'], true)) {
     require __DIR__ . '/workspace.php';
     exit;
 }
 
-require_once __DIR__ . '/../api/current-user.php';
+require_once __DIR__ . '/../api/cabinet.php';
 
 if (session_status() !== PHP_SESSION_ACTIVE) {
     session_start();
@@ -19,7 +23,7 @@ if (!$currentUser || $currentUser['role'] !== 'student') {
     exit;
 }
 
-$csrfToken = $_SESSION['csrf_token'] ?? '';
+$_SESSION['csrf_token'] ??= bin2hex(random_bytes(32));
 
 $studentName = $currentUser['name'];
 $groupName = null;
@@ -40,7 +44,7 @@ try {
         SELECT st.fio, g.name AS group_name, BTRIM(s.name) AS subject_name,
                LOWER(BTRIM(s.name)) AS subject_key,
                TO_CHAR(l.date, 'YYYY-MM-DD') AS grade_date,
-               e.grade
+               e.grade, e.previous_grade, l.lesson_type
         FROM student_profile p
         JOIN public.students st ON st.id = p.id
         JOIN public.stud_groups g ON g.id = st.in_group
@@ -65,7 +69,7 @@ try {
                 $key = $profile['subject_key'];
                 $date = $profile['grade_date'];
                 $subjects[$key] ??= $profile['subject_name'];
-                $gradesBySubjectAndDate[$key][$date][] = $profile['grade'];
+                $gradesBySubjectAndDate[$key][$date][] = $profile;
                 $dates[$date] = true;
             }
         } while ($profile = $statement->fetch(PDO::FETCH_ASSOC));
@@ -120,28 +124,9 @@ if (!isset($academicMonths[$currentMonth])) {
     <title>Контур — Кабинет студента</title>
     <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('index.css'), ENT_QUOTES, 'UTF-8') ?>" />
   <link rel="stylesheet" href="<?= htmlspecialchars(cabinetAsset('cabinet.css'), ENT_QUOTES, 'UTF-8') ?>"><script src="<?= htmlspecialchars(cabinetAsset('cabinet.js'), ENT_QUOTES, 'UTF-8') ?>" defer></script></head>
-  <body>
+  <body class="student">
     <div class="app-shell">
-      <aside class="sidebar">
-        <div class="brand"><span class="brand-mark"><i></i><i></i><i></i></span><b>EDU=SPT</b></div>
-        <div class="user-card">
-          <span class="avatar"><?= htmlspecialchars(preg_match('/^./u', $studentName, $avatarLetter) ? $avatarLetter[0] : 'С') ?></span>
-          <div>
-            <b><?= htmlspecialchars($studentName) ?></b>
-            <small>Студент<?= $groupName !== null ? ' (' . htmlspecialchars($groupName) . ')' : '' ?></small>
-          </div>
-        </div>
-        <nav>
-          <button class="active">
-            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2Z"/></svg>
-            <span>Моя успеваемость</span>
-          </button>
-        <a href="student.php?tab=schedule" title="Расписание"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Расписание</span></a><a href="student.php?tab=monthly" title="Аттестация за месяцы"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Аттестация за месяцы</span></a><a href="student.php?tab=finals" title="Итоговые оценки"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Итоговые оценки</span></a><a href="student.php?tab=group" title="Моя группа"><svg width="20" height="20" viewBox="0 0 24 24" stroke="currentColor" fill="none" aria-hidden="true"><rect x="4" y="4" width="16" height="16"/><path d="M8 10h8M8 14h8"/></svg><span>Моя группа</span></a></nav>
-        <button class="logout" onclick="doLogout()">
-          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M10 17l5-5-5-5M15 12H3"/><path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4"/></svg>
-          <span>Выйти</span>
-        </button>
-      </aside>
+      <?php cabSidebar('student', ['name' => $studentName] + $currentUser, 'home', $_SESSION['csrf_token']); ?>
 
       <main class="content">
         <header class="topbar">
@@ -226,9 +211,9 @@ if (!isset($academicMonths[$currentMonth])) {
                           <?php if ($cellGrades === []): ?>
                             <span class="muted">—</span>
                           <?php endif; ?>
-                          <?php foreach ($cellGrades as $grade): ?>
-                            <span class="grade" style="margin: 0 auto;" data-value="<?= htmlspecialchars($grade) ?>"><?= htmlspecialchars($grade) ?></span>
-                          <?php endforeach; ?>
+                          <span class="marks-list"><?php foreach ($cellGrades as $entry): ?>
+                            <span class="mark-entry"><span <?= cabGradeAttributes('grade', $entry['lesson_type'] === 'Экзамен' ? $entry['previous_grade'] : null) ?> data-value="<?= ch($entry['grade']) ?>"><?= ch($entry['grade']) ?></span></span>
+                          <?php endforeach; ?></span>
                         </td>
                       <?php endforeach; ?>
                       <td>
@@ -245,7 +230,6 @@ if (!isset($academicMonths[$currentMonth])) {
     </div>
 
     <script>
-      const CSRF_TOKEN = "<?= $csrfToken ?>";
 
       // Логика связи фильтра Семестра и Месяцев
       function onSemesterChange() {
@@ -347,24 +331,7 @@ if (!isset($academicMonths[$currentMonth])) {
         });
       }
 
-      async function doLogout() {
-        try {
-          await fetch("index.php", {
-            method: "POST",
-            credentials: "same-origin",
-            headers: {
-              "Content-Type": "application/json",
-              "Accept": "application/json",
-              "X-CSRF-Token": CSRF_TOKEN,
-            },
-            body: JSON.stringify({ action: "logout" }),
-          });
-        } catch (_) {}
-        window.location.href = "index.php";
-      }
 
-      // Инициализация фильтрации при загрузке (с выбранным текущим месяцем)
-      document.addEventListener("DOMContentLoaded", filterTable);
     </script>
   </body>
 </html>

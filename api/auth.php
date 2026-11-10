@@ -18,7 +18,8 @@ function login(string $login, string $pass): bool {
     }
 
     $role = $user['role'] ?? 'student';
-    $name = $user['full_name'] ?? $user['login'];
+    $fullName = trim($user['full_name'] ?? '');
+    $name = $fullName !== '' ? $fullName : $user['login'];
 
     if (array_key_exists('role_id', $user)) {
         $stmt = $pdo->prepare(<<<'SQL'
@@ -49,7 +50,8 @@ function login(string $login, string $pass): bool {
 
         $name = match ($role) {
             'student' => $profile['student_name'] ?? $user['login'],
-            'teacher', 'head' => $profile['teacher_name'] ?? $user['login'],
+            'teacher' => $profile['teacher_name'] ?? $user['login'],
+            'head' => $fullName !== '' ? $fullName : ($profile['teacher_name'] ?? $user['login']),
             'secretary' => $profile['secretary_name'] ?? $user['login'],
         };
     }
@@ -77,9 +79,31 @@ function getCurrentUser(): ?array {
     if (empty($_SESSION['user_id'])) {
         return null;
     }
-    return [
-        'id'   => (int) $_SESSION['user_id'],
-        'role' => $_SESSION['user_role'] ?? 'student',
-        'name' => $_SESSION['user_name'] ?? 'Пользователь',
-    ];
+    $id = (int) $_SESSION['user_id'];
+    $role = $_SESSION['user_role'] ?? 'student';
+    $name = $_SESSION['user_name'] ?? 'Пользователь';
+
+    if (in_array($role, ['head', 'secretary'], true)) {
+        $pdo = connectDB();
+        $stmt = $pdo->prepare(<<<'SQL'
+            SELECT COALESCE(
+                CASE :role
+                    WHEN 'head' THEN COALESCE(NULLIF(BTRIM(to_jsonb(a)->>'full_name'), ''), t.fio)
+                    WHEN 'secretary' THEN sc.name
+                END,
+                a.login
+            )
+            FROM public.auth a
+            LEFT JOIN public.teachers t ON t.auth_id = a.id
+            LEFT JOIN public.secretaries sc ON sc.auth_id = a.id
+            WHERE a.id = :id
+            SQL);
+        $stmt->execute(['id' => $id, 'role' => $role]);
+        $displayName = $stmt->fetchColumn();
+        if ($displayName !== false) {
+            $name = $displayName;
+        }
+    }
+
+    return ['id' => $id, 'role' => $role, 'name' => $name];
 }

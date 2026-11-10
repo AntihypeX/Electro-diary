@@ -18,6 +18,9 @@
 .head .head-filters { margin: 0; align-items: end; gap: 12px; }
 .head-filters label { width: auto; flex: 1 1 150px; min-width: 0; max-width: 100%; }
 .head-filters select { width: 100%; max-width: 100%; min-width: 0; padding: 10px; }
+.head-attestation-filters label { flex-basis: 125px; }
+.head-attestation-filters select { font-size: 12px; }
+.head-filter-actions { align-items: center; }
 .head-button {
   display: inline-flex;
   align-items: center;
@@ -80,4 +83,8 @@
   .head-profile details { padding-inline: 12px; }
   .head-matrix th:first-child { min-width: 110px; max-width: 130px; padding-inline: 8px; }
   .head-matrix th:last-child, .head-matrix td:last-child { position: static; }
+}
+
+@media (max-width: 600px) {
+  .head-attestation-filters .head-filter-actions { grid-column: 1 / -1; }
 }

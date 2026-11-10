@@ -669,3 +669,113 @@ body .page-stack {
     white-space: normal;
   }
 }
+
+.record-table [data-result-details] {
+  white-space: nowrap;
+}
+
+.app-shell .cab-sidebar nav a {
+  gap: 13px;
+  padding: 12px 13px;
+  color: #a4a4a4;
+}
+.app-shell .cab-sidebar nav a:hover,
+.app-shell .cab-sidebar nav a[aria-current="page"] {
+  color: #fff;
+  background: #252525;
+}
+.app-shell .cab-sidebar nav a[aria-current="page"]::after {
+  content: "";
+  width: 4px;
+  height: 4px;
+  margin-left: auto;
+  background: #fff;
+}
+.cab-sidebar .cab-logout .logout { width: 100%; }
+.cab-slot { min-width: 115px; }
+.cab-slot small { display: block; margin-top: 4px; white-space: nowrap; }
+.cab-slot-lesson + .cab-slot-lesson { margin-top: 12px; }
+.cab-roster { padding: 0 20px 16px 45px; }
+.cab-roster li { padding: 6px 0; }
+
+@media (max-width: 900px) {
+  .app-shell .cab-sidebar nav a { padding-inline: 4px; justify-content: center; }
+  .app-shell .cab-sidebar nav a[aria-current="page"]::after { display: none; }
+}
+@media (max-width: 600px) {
+  .app-shell .cab-sidebar { width: 52px; padding-inline: 6px; }
+  .cab-pair { flex-wrap: wrap; }
+}
+
+.app-shell :is(.grade, .record-table .record-mark) {
+  display: inline;
+  width: auto;
+  min-width: 0;
+  height: auto;
+  min-height: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: #171717;
+  font-weight: 600;
+}
+.app-shell button:is(.grade, .record-mark):hover { text-decoration: underline; }
+.app-shell .marks-list { display: inline-flex; align-items: baseline; gap: 0; white-space: nowrap; }
+.marks-list .mark-entry + .mark-entry::before { content: ", "; white-space: pre; }
+.teacher-grade-list .teacher-add { margin-left: 6px; }
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] {
+  background: #dededb !important;
+  color: #171717;
+}
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .grade,
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .teacher-add,
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] .teacher-date,
+.teacher .teacher-matrix [data-lesson-kind="Экзамен"] small {
+  background: transparent;
+  color: #171717;
+}
+.quick-grade-options button { background: #f5f5f3; color: #171717; border-color: #bdbdb9; }
+.quick-grade-options button:hover:not(:disabled) { background: #e5e5e2; }
+.app-shell button:is(.grade, .record-mark) { padding: 4px 3px; cursor: pointer; }
+
+.app-shell .record-table button.record-mark-add {
+  display: inline-grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #c8c8c5;
+  background: #f4f4f2;
+  text-decoration: none;
+}
+.app-shell .record-table button.record-mark-add:hover { background: #e6e6e2; }
+.cab-group > summary { cursor: pointer; }
+.cab-group > summary h3::before { content: "▸ "; }
+.cab-group[open] > summary h3::before { content: "▾ "; }
+.cab-list-scroll {
+  max-width: 100%;
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.cab-day-nav summary { list-style: none; }
+.cab-day-nav summary::-webkit-details-marker { display: none; }
+
+.app-shell .grade.grade-changed,
+.app-shell .record-table .record-mark.grade-changed {
+  padding-inline: 4px;
+  border-radius: 2px;
+  box-shadow: inset 0 0 0 100px #deded9;
+  text-decoration: underline dotted;
+  text-underline-offset: 3px;
+}
+
+
+.cab-sidebar-staff .user-card b {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.cab-sidebar-staff .user-card .avatar {
+  flex-shrink: 0;
+}

@@ -181,6 +181,7 @@ form.addEventListener('submit', async (event) => {
   const payload = { ...editor };
   if (editor.action === 'lesson') {
     payload.topic = form.elements.topic.value;
+    payload.newTopic = form.elements.newTopic.value.trim();
     payload.type = form.elements.type.value;
   } else {
     const grades = Array.from(gradeRows.querySelectorAll('select'), (select) => select.value);
@@ -201,23 +202,37 @@ form.addEventListener('submit', async (event) => {
   }
 });
 
-document.querySelector('#teacher-logout').addEventListener('click', async (event) => {
-  const button = event.currentTarget;
-  button.disabled = true;
-  try {
-    await send('index.php', { action: 'logout' });
-    location.assign('index.php');
-  } catch {
-    notice.textContent = 'Не удалось выйти. Попробуйте ещё раз.';
-    notice.hidden = false;
-    button.disabled = false;
-  }
-});
-
 function syncTopicType() {
+  const addingTopic = form.elements.newTopic.value.trim() !== '';
   const selected = form.elements.topic.selectedOptions[0];
-  const type = selected?.dataset.type;
+  const type = addingTopic ? '' : selected?.dataset.type;
+  form.elements.topic.required = !addingTopic;
+  form.elements.topic.disabled = addingTopic;
+  form.elements.newTopic.required = false;
   if (type) form.elements.type.value = type;
   form.elements.type.disabled = Boolean(type);
 }
 form.elements.topic.addEventListener('change', syncTopicType);
+form.elements.newTopic.addEventListener('input', syncTopicType);
+
+const autoAttestation = document.querySelector('[data-auto-attestation]');
+autoAttestation?.addEventListener('click', async () => {
+  if (!window.confirm('Заполнить пустые ячейки аттестации по среднему баллу?')) return;
+  autoAttestation.disabled = true;
+  try {
+    const response = await fetch(location.href, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-CSRF-Token': document.querySelector('meta[name="csrf-token"]').content,
+      },
+      body: autoAttestation.dataset.autoAttestation,
+    });
+    const result = await response.json();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Не удалось заполнить аттестацию.');
+    location.reload();
+  } catch (error) {
+    alert(error.message);
+    autoAttestation.disabled = false;
+  }
+});

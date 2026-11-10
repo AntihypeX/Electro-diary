@@ -62,6 +62,7 @@ document.addEventListener(
           previous: button.dataset.value,
         });
     }
+    const examLesson = cell?.dataset.lessonKind === "Экзамен";
     let batch = false;
     const queued = [];
     const caption = document.createElement("p");
@@ -178,7 +179,7 @@ document.addEventListener(
         };
         choices.append(choice);
       }
-      if (action === "grade_add") {
+      if (action === "grade_add" && !examLesson) {
         if (!batch) gradePicker.append(extra);
         else {
           selected.replaceChildren();
