@@ -63,6 +63,9 @@ document.addEventListener(
         });
     }
     const examLesson = cell?.dataset.lessonKind === "Экзамен";
+    const otherAbsence = cell && [...cell.querySelectorAll('[data-action="grade_edit"]')].some(
+      (mark) => mark !== button && mark.dataset.value.toLowerCase() === "н",
+    );
     let batch = false;
     const queued = [];
     const caption = document.createElement("p");
@@ -74,7 +77,7 @@ document.addEventListener(
     const extra = document.createElement("button");
     extra.type = "button";
     extra.className = "cab-button";
-    extra.textContent = "Несколько оценок за занятие";
+    extra.textContent = "Несколько отметок за занятие";
     const selected = document.createElement("div");
     selected.className = "quick-grade-queued";
     const save = document.createElement("button");
@@ -165,12 +168,8 @@ document.addEventListener(
         choice.textContent = value;
         choice.setAttribute("aria-label", "Поставить " + value);
         choice.disabled =
-          value === "н" &&
-          ((data.expectedCount > 0 && action === "grade_add") ||
-            (data.expectedCount > 1 && action === "grade_edit") ||
-            queued.length > 0);
-        if (batch && (queued.includes("н") || queued.length >= 10))
-          choice.disabled = true;
+          (value === "н" && (otherAbsence || queued.includes("н"))) ||
+          (batch && queued.length >= 10);
         choice.onclick = () => {
           if (batch) {
             queued.push(value);

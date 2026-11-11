@@ -311,7 +311,7 @@ function headPagination(string $tab, array $filters, string $key, int $page, int
           </section>
           <?php if ($tab === 'journal'): ?>
           <section class="panel" id="attestations">
-            <header class="panel-head"><div><h3>Аттестации студента и группы</h3></div><span class="count"><?= $attestations['total'] ?> отметок</span></header>
+            <header class="panel-head"><div><h3>Аттестации студента и группы</h3></div></header>
             <form method="get" class="filter-toolbar head-filters head-attestation-filters" action="head.php#attestations">
               <input type="hidden" name="tab" value="journal">
               <input type="hidden" name="lessons_page" value="<?= $journal['page'] ?>">

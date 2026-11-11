@@ -110,11 +110,7 @@ $monthsShort = [
     "11" => "ноя", "12" => "дек"
 ];
 
-// Текущий месяц по умолчанию
-$currentMonth = date("m");
-if (!isset($academicMonths[$currentMonth])) {
-    $currentMonth = "";
-}
+
 ?>
 <!doctype html>
 <html lang="ru">
@@ -156,7 +152,7 @@ if (!isset($academicMonths[$currentMonth])) {
               <select id="monthFilter" onchange="filterTable()">
                 <option value="">Все месяцы</option>
                 <?php foreach ($academicMonths as $mNum => $mInfo): ?>
-                  <option value="<?= $mNum ?>" data-semester="<?= $mInfo['semester'] ?>" <?= $mNum === $currentMonth ? 'selected' : '' ?>><?= $mInfo['name'] ?></option>
+                  <option value="<?= $mNum ?>" data-semester="<?= $mInfo['semester'] ?>"><?= $mInfo['name'] ?></option>
                 <?php endforeach; ?>
               </select>
             </div>
@@ -238,13 +234,11 @@ if (!isset($academicMonths[$currentMonth])) {
         const options = monthSelect.querySelectorAll('option');
 
         // Сбрасываем выбор месяца при смене семестра, либо фильтруем доступные опции
-        let firstAvailable = "";
         options.forEach(opt => {
           if (!opt.value) return;
           const optSem = opt.getAttribute('data-semester');
           if (!semVal || optSem === semVal) {
             opt.style.display = '';
-            if (!firstAvailable) firstAvailable = opt.value;
           } else {
             opt.style.display = 'none';
           }
@@ -313,9 +307,9 @@ if (!isset($academicMonths[$currentMonth])) {
               if (th.style.display !== 'none') {
                 const cell = row.children[index];
                 cell.querySelectorAll('.grade').forEach(grade => {
-                  const val = Number(grade.dataset.value);
-                  if (Number.isFinite(val)) {
-                    sum += val;
+                  const value = grade.dataset.value.trim();
+                  if (['2', '3', '4', '5'].includes(value)) {
+                    sum += Number(value);
                     count++;
                   }
                 });
@@ -332,6 +326,7 @@ if (!isset($academicMonths[$currentMonth])) {
       }
 
 
+      filterTable();
     </script>
   </body>
 </html>

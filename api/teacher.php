@@ -132,11 +132,10 @@ function teacherSave(PDO $db, int $teacher, array $input): string
             !is_array($grades) ||
             !array_is_list($grades) ||
             count($grades) < 1 ||
-            count($grades) > 10 ||
-            (in_array("н", $grades, true) && count($grades) !== 1)
+            count($grades) > 10
         ) {
             throw new TeacherRequestError(
-                "Выберите от одной до десяти оценок или одну отметку «н».",
+                "Выберите от одной до десяти отметок.",
                 400,
             );
         }
@@ -167,12 +166,10 @@ function teacherSave(PDO $db, int $teacher, array $input): string
         if ($lesson['lesson_type'] === 'Экзамен' && (count($grades) !== 1 || $currentGrades)) {
             throw new TeacherRequestError('За экзамен можно поставить только одну отметку. Измените существующую.', 409);
         }
-        if (
-            array_intersect($currentGrades, ["н", "Н"]) ||
-            ($currentGrades && in_array("н", $grades, true))
-        ) {
+        $absenceCount = count(array_intersect($grades, ["н"]));
+        if ($absenceCount > 1 || ($absenceCount === 1 && array_intersect($currentGrades, ["н", "Н"]))) {
             throw new TeacherRequestError(
-                "Для этой пары используйте оценки или одну отметку «н». Существующую отметку можно исправить.",
+                "За занятие можно поставить только одну отметку «н».",
                 400,
             );
         }
@@ -227,7 +224,7 @@ function teacherSave(PDO $db, int $teacher, array $input): string
             $db,
             <<<'SQL'
             SELECT id FROM public.evaluations
-            WHERE lesson_id = ? AND student_id = ? AND id <> ? AND NULLIF(BTRIM(grade), '') IS NOT NULL
+            WHERE lesson_id = ? AND student_id = ? AND id <> ? AND grade IN ('н', 'Н')
             LIMIT 1
             SQL
             ,
@@ -235,7 +232,7 @@ function teacherSave(PDO $db, int $teacher, array $input): string
         )->fetchColumn()
     ) {
         throw new TeacherRequestError(
-            "В ячейке уже есть другие оценки. «н» можно поставить как единственную отметку.",
+            "За занятие уже есть отметка «н».",
             400,
         );
     }

@@ -389,7 +389,7 @@ preg_match('/\A./u', $name, $initial);
             <input type="hidden" name="tab" value="<?= h($tab) ?>">
             <?php teacherSelect('year', 'Учебный год', $years, $year); ?>
             <?php teacherSelect('group', 'Группа', $groups ?: [0 => 'Нет групп'], $group); ?>
-            <?php teacherSelect('subject', 'Дисциплина', $subjects ?: [0 => 'Нет дисциплин'], $subject, $tab === 'attestation'); ?>
+            <?php teacherSelect('subject', 'Дисциплина', $subjects ?: [0 => 'Нет дисциплин'], $subject, true); ?>
             <?php teacherSelect('student', 'Студент', [0 => 'Все студенты'] + $students, $student); ?>
             <?php teacherSelect('semester', 'Семестр', $tab === 'journal' ? [0 => 'Все семестры'] + $semesterNames : $semesterNames, $semester); ?>
             <?php teacherSelect('month', 'Месяц', [0 => 'Все месяцы'] + $months, $month); ?>
@@ -454,7 +454,7 @@ preg_match('/\A./u', $name, $initial);
                                   <span class="mark-entry"><button <?= cabGradeAttributes('grade', $exam ? $entry['previous_grade'] : null) ?> type="button" data-action="grade_edit" data-entry="<?= h($entry['id']) ?>"
                                     data-value="<?= h($entry['grade']) ?>" aria-label="<?= h('Изменить оценку ' . $entry['grade'] . ' · ' . $fio . ' · ' . shortDate($column['date'])) ?>"><?= h($entry['grade']) ?></button></span>
                                 <?php endforeach; ?>
-                                <?php if ((!$exam || !$grades) && !array_intersect(array_column($grades, 'grade'), ['н', 'Н'])): ?>
+                                <?php if (!$exam || !$grades): ?>
                                   <button class="teacher-add" type="button" data-action="grade_add"
                                     aria-label="<?= h('Добавить оценку · ' . $fio . ' · ' . shortDate($column['date'])) ?>">+</button>
                                 <?php endif; ?>

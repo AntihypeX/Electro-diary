@@ -35,15 +35,14 @@ if (matrix && Number.isFinite(history.state?.teacherMatrixScroll)) {
 
 function refreshGradeOptions() {
   const choices = Array.from(gradeRows.querySelectorAll('select'));
-  const absent = choices.some((select) => select.value === 'н');
-  const multipleGrades = choices.length > 1 || editor.expectedCount > (editor.action === 'grade_edit' ? 1 : 0);
 
   for (const [index, select] of choices.entries()) {
     select.previousElementSibling.textContent = choices.length > 1 ? `Оценка ${index + 1}` : 'Отметка';
-    select.querySelector('option[value="н"]').disabled = multipleGrades;
+    select.querySelector('option[value="н"]').disabled =
+      editor.otherAbsence || choices.some((other) => other !== select && other.value === 'н');
   }
 
-  addRowButton.disabled = absent || choices.length >= 10;
+  addRowButton.disabled = editor.examLesson || choices.length >= 10;
 }
 
 function addGradeRow(value = '') {
@@ -118,6 +117,10 @@ matrix?.addEventListener('click', (event) => {
       lesson: selectedCell.dataset.lesson,
       student: row.dataset.student,
       expectedCount: Number(selectedCell.dataset.count),
+      examLesson: selectedCell.dataset.lessonKind === 'Экзамен',
+      otherAbsence: [...selectedCell.querySelectorAll('[data-action="grade_edit"]')].some(
+        (mark) => mark !== button && mark.dataset.value.toLowerCase() === 'н',
+      ),
     });
     context = `${row.dataset.name} · ${dateButton.dataset.caption}`;
     title = action === 'grade_add' ? 'Добавить оценку' : 'Изменить оценку';
