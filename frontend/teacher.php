@@ -162,6 +162,7 @@ if ($teacher) {
                 JOIN public.subjects s ON s.id=l.subject
                 JOIN public.students st ON st.in_group=l.in_group
                 WHERE l.teacher=? AND l.date>=? AND l.date<=?
+                  AND l.lesson_type IS DISTINCT FROM 'Лекция'
                   AND NOT EXISTS(SELECT 1 FROM public.evaluations e WHERE e.lesson_id=l.id AND e.student_id=st.id AND NULLIF(BTRIM(e.grade),'') IS NOT NULL)
                 GROUP BY l.id,g.name,s.name ORDER BY l.date DESC,l.num_in_table
                 SQL, [$teacher,$today->modify('-30 days')->format('Y-m-d'),$today->format('Y-m-d')]);
